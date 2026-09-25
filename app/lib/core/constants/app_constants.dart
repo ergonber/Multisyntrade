@@ -5,7 +5,7 @@ class AppConstants {
   static const String appVersion = '2.0.0';
 
   static const int maxPasswordLength = 128;
-  static const int minPasswordLength = 10;
+  static const int minPasswordLength = 6;
   static const int maxLoginAttempts = 5;
   static const int loginBlockDurationMinutes = 15;
 

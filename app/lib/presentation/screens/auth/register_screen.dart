@@ -50,7 +50,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Cuenta creada. Revisa tu correo para confirmar tu cuenta.'),
+            content: Text('Cuenta creada.'),
             backgroundColor: AppColors.primary,
             duration: Duration(seconds: 4),
           ),

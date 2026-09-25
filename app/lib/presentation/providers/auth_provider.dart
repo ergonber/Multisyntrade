@@ -34,7 +34,7 @@ class AuthProvider extends ChangeNotifier {
   bool get isAuthenticated => _status == AuthStatus.authenticated;
   bool get isAdmin => _profile?.isAdmin ?? false;
   User? get currentUser => _authRepo.currentUser;
-  String get userName => _profile?.nombre ?? currentUser?.userMetadata?['name'] ?? 'Trader';
+  String get userName => _profile?.nombre ?? currentUser?.userMetadata?['nombre'] ?? currentUser?.userMetadata?['name'] ?? 'Trader';
   String get userEmail => currentUser?.email ?? '';
   String? get deviceMismatchMessage => _deviceMismatchMessage;
 
@@ -168,9 +168,15 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _authRepo.signUp(name, email, password);
-      await DeviceService.registerDevice();
-      await _loadProfile();
+      final response = await _authRepo.signUp(name, email, password);
+      if (response.session != null) {
+        await DeviceService.registerDevice();
+        await _loadProfile();
+      } else {
+        // Sin sesión (p. ej. confirmación requerida): no autenticado.
+        _status = AuthStatus.unauthenticated;
+        notifyListeners();
+      }
       return true;
     } on AuthException catch (e) {
       _error = e.message;

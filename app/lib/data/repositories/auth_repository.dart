@@ -51,7 +51,7 @@ class AuthRepository {
       final response = await _client.auth.signUp(
         email: email,
         password: password,
-        data: {'name': name},
+        data: {'nombre': name},
         emailRedirectTo: _redirectTo,
       );
       return response;
