@@ -144,7 +144,7 @@ class _SubscriptionGateScreenState extends State<SubscriptionGateScreen> {
   String _messageForStatus(SubscriptionStatus status) {
     switch (status) {
       case SubscriptionStatus.pending:
-        return 'Tu cuenta está pendiente de activación por un administrador.\n\nContactá con el administrador.';
+        return 'Tu cuenta está pendiente de activación por el administrador.';
       case SubscriptionStatus.expired:
         return 'Tu suscripción ha vencido.\n\nContactá con el administrador para renovar.';
       case SubscriptionStatus.cancelled:

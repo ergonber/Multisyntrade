@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../config/app_colors.dart';
 import '../../../providers/admin/admin_operations_provider.dart';
+import '../../../../data/models/admin/operation_model.dart';
 import '../widgets/admin_empty_state.dart';
 import '../widgets/admin_loading.dart';
 import '../widgets/admin_status_badge.dart';
@@ -59,45 +60,7 @@ class _AdminOperationsScreenState extends State<AdminOperationsScreen> {
                             itemCount: provider.filtered.length,
                             itemBuilder: (context, index) {
                               final op = provider.filtered[index];
-                              return Container(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: AppColors.card,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: AppColors.border, width: 0.5),
-                                ),
-                                child: Row(
-                                  children: [
-                                    AdminStatusBadge(
-                                      label: op.estado,
-                                      color: op.isExecuted ? AppColors.positive :
-                                             op.isPending ? AppColors.warning : AppColors.textSecondary,
-                                      small: true,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text('${op.derivSymbol ?? ''} ${op.direccion ?? ''}',
-                                              style: const TextStyle(fontWeight: FontWeight.w500)),
-                                          Text('x${op.multiplicador ?? 0} - \$${op.monto?.toStringAsFixed(2) ?? '0'}',
-                                              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                                        ],
-                                      ),
-                                    ),
-                                    if (op.ganancia != null)
-                                      Text(
-                                        '${op.ganancia! >= 0 ? '+' : ''}\$${op.ganancia!.toStringAsFixed(2)}',
-                                        style: TextStyle(
-                                          color: op.ganancia! >= 0 ? AppColors.positive : AppColors.negative,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              );
+                              return _buildOperationCard(op);
                             },
                           ),
                   ),
@@ -105,6 +68,96 @@ class _AdminOperationsScreenState extends State<AdminOperationsScreen> {
               ),
             ),
     );
+  }
+
+  Widget _buildOperationCard(OperationModel op) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.border, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              AdminStatusBadge(
+                label: op.estadoLabel,
+                color: _estadoColor(op),
+                small: true,
+              ),
+              const Spacer(),
+              Text(
+                _formatDate(op.createdAt),
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      op.userName ?? 'Sin usuario',
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _assetLabel(op),
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Monto: \$${(op.monto ?? 0).toStringAsFixed(2)}',
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              if (op.resultado != null)
+                Text(
+                  '${op.resultado! >= 0 ? '+' : ''}\$${op.resultado!.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    color: op.resultado! >= 0 ? AppColors.positive : AppColors.negative,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _assetLabel(OperationModel op) {
+    final symbol = op.derivSymbol ?? op.activo ?? '-';
+    if (op.direccion != null && op.direccion!.isNotEmpty) {
+      return '$symbol · ${op.direccion!}';
+    }
+    return symbol;
+  }
+
+  Color _estadoColor(OperationModel op) {
+    if (op.isWin) return AppColors.positive;
+    if (op.isLoss) return AppColors.negative;
+    if (op.isEnCurso) return AppColors.warning;
+    if (op.isRechazada) return AppColors.negative;
+    if (op.isCancelada) return AppColors.textSecondary;
+    return AppColors.textSecondary;
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return '-';
+    final local = date.toLocal();
+    final two = (int n) => n.toString().padLeft(2, '0');
+    return '${two(local.day)}/${two(local.month)}/${local.year} ${two(local.hour)}:${two(local.minute)}';
   }
 
   Widget _buildFilterDropdown(AdminOperationsProvider provider) {
@@ -122,8 +175,11 @@ class _AdminOperationsScreenState extends State<AdminOperationsScreen> {
         isDense: true,
         items: const [
           DropdownMenuItem(value: null, child: Text('Todos', style: TextStyle(fontSize: 12))),
-          DropdownMenuItem(value: 'pendiente', child: Text('Pendientes', style: TextStyle(fontSize: 12))),
-          DropdownMenuItem(value: 'ejecutada', child: Text('Ejecutadas', style: TextStyle(fontSize: 12))),
+          DropdownMenuItem(value: 'en_curso', child: Text('En curso', style: TextStyle(fontSize: 12))),
+          DropdownMenuItem(value: 'ganada', child: Text('Ganadas', style: TextStyle(fontSize: 12))),
+          DropdownMenuItem(value: 'perdida', child: Text('Perdidas', style: TextStyle(fontSize: 12))),
+          DropdownMenuItem(value: 'rechazada', child: Text('Rechazadas', style: TextStyle(fontSize: 12))),
+          DropdownMenuItem(value: 'cancelada', child: Text('Canceladas', style: TextStyle(fontSize: 12))),
         ],
         onChanged: (v) => provider.setFilter(v),
       ),

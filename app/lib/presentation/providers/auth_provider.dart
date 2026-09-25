@@ -183,6 +183,11 @@ class AuthProvider extends ChangeNotifier {
       _status = AuthStatus.unauthenticated;
       notifyListeners();
       return false;
+    } catch (e) {
+      _error = 'Error al crear cuenta';
+      _status = AuthStatus.unauthenticated;
+      notifyListeners();
+      return false;
     }
   }
 

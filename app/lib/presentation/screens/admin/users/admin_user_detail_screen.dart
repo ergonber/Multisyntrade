@@ -180,7 +180,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
               child: ElevatedButton.icon(
                 onPressed: () => _activateSubscription(),
                 icon: const Icon(Icons.check_circle_outline, size: 18),
-                label: Text(_user!.isPending ? 'ACTIVAR CUENTA' : 'RENOVAR SUSCRIPCIÓN'),
+                label: const Text('ACTIVAR ACCESO'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.positive,
                   foregroundColor: Colors.black,
@@ -200,11 +200,9 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.card,
-        title: Text(_user!.isPending ? 'Activar cuenta' : 'Renovar suscripción'),
+        title: const Text('Activar acceso'),
         content: Text(
-          _user!.isPending
-              ? '¿Activar la cuenta de ${_user!.displayName} por 12 meses (VIP)?'
-              : '¿Renovar la suscripción de ${_user!.displayName} por 12 meses (VIP)?',
+          '¿Activar el acceso de ${_user!.displayName} por 12 meses (VIP)?',
         ),
         actions: [
           TextButton(
@@ -220,13 +218,13 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
     );
 
     if (confirmed == true && mounted) {
-      await context.read<AdminUsersProvider>().activateSubscription(_user!.id);
+      final ok = await context.read<AdminUsersProvider>().activateSubscription(_user!.id);
       await _loadData();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Suscripción activada correctamente'),
-            backgroundColor: AppColors.positive,
+          SnackBar(
+            content: Text(ok ? 'Acceso activado correctamente' : 'Error al activar acceso'),
+            backgroundColor: ok ? AppColors.positive : AppColors.negative,
           ),
         );
       }

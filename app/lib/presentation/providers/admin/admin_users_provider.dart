@@ -65,13 +65,15 @@ class AdminUsersProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> activateSubscription(String userId, {int meses = 12}) async {
+  Future<bool> activateSubscription(String userId, {int meses = 12}) async {
     try {
       await _repo.activateSubscription(userId, meses: meses);
       await load();
+      return true;
     } on AppException catch (e) {
       _error = e.message;
       notifyListeners();
+      return false;
     }
   }
 

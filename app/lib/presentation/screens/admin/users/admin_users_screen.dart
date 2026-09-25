@@ -283,12 +283,12 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         );
 
         if (confirmed == true) {
-          await provider.activateSubscription(user.id);
+          final ok = await provider.activateSubscription(user.id);
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('${user.displayName} activado correctamente'),
-                backgroundColor: AppColors.positive,
+                content: Text(ok ? '${user.displayName} activado correctamente' : 'Error al activar acceso'),
+                backgroundColor: ok ? AppColors.positive : AppColors.negative,
               ),
             );
           }
@@ -302,7 +302,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           border: Border.all(color: AppColors.positive.withOpacity(0.3)),
         ),
         child: const Text(
-          'Activar',
+          'Activar acceso',
           style: TextStyle(color: AppColors.positive, fontSize: 12, fontWeight: FontWeight.w600),
         ),
       ),

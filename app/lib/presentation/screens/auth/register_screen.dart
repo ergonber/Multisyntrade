@@ -45,6 +45,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
         } else if (auth.hasAccess) {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
         } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Cuenta creada. Tu acceso está pendiente de activación por el administrador.'),
+              backgroundColor: AppColors.primary,
+              duration: Duration(seconds: 5),
+            ),
+          );
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SubscriptionGateScreen()));
         }
       } else {
