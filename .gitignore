@@ -4,15 +4,15 @@ supabase/.temp/
 # Secrets / env
 .env
 .env.*
+!.env.example
 .secrets/
 *.key
 
 # Node
 node_modules/
 
-# Flutter / Dart
+# Flutter / Dart (app/build/web SE CONSERVA - lo maneja app/.gitignore)
 .dart_tool/
-build/
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages

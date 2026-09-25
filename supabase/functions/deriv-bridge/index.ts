@@ -82,14 +82,13 @@ async function getOtpWsUrl(token: string, accountId: string, r: string): Promise
   return url;
 }
 
-/* ---------- ACCOUNT BY ROLE (admin=demo, user=real) ---------- */
+/* ---------- ACCOUNT (Solo DEMO) ---------- */
 
 async function resolveAccountId(
   admin: SupabaseClient,
   userId: string,
   token: string,
   storedLoginid: string,
-  role: string | null | undefined,
   r: string,
 ): Promise<string> {
   try {
@@ -98,7 +97,8 @@ async function resolveAccountId(
     });
     const d = await resp.json();
     const list: any[] = d?.data ?? d?.accounts ?? [];
-    const want = role === "admin" ? "demo" : "real";
+    // Solo DEMO: siempre elegir la cuenta demo del usuario.
+    const want = "demo";
     const chosen = list.find((a: any) => a.account_type === want);
     if (chosen?.account_id && chosen.account_id !== storedLoginid) {
       log("OTP", r, `account override ${storedLoginid} -> ${chosen.account_id} (${want})`);
@@ -124,7 +124,7 @@ async function executeForVentana(
   // Find eligible users
   const { data: profiles, error: pErr } = await admin
     .from("profiles")
-    .select("id, capital_inicial, risk_percentage, rol")
+    .select("id, capital_inicial, risk_percentage")
     .eq("capital_inicial_configurado", true)
     .gt("capital_inicial", 0);
 
@@ -191,7 +191,7 @@ async function executeForVentana(
       // Deriv block with retry
       const contractId = await withRetry(async () => {
         const token = await decrypt(conn.ciphertext);
-        const accountId = await resolveAccountId(admin, userId, token, conn.loginid, prof.rol, r);
+        const accountId = await resolveAccountId(admin, userId, token, conn.loginid, r);
         const wsUrl = await getOtpWsUrl(token, accountId, r);
 
         try { ws?.close(); } catch (_) {}

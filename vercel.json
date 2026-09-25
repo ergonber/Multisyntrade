@@ -1,0 +1,23 @@
+{
+  "outputDirectory": "app/build/web",
+  "framework": null,
+  "installCommand": "echo 'Static build - no install needed'",
+  "buildCommand": "echo 'Flutter built locally - deploying static files'",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/canvaskit/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ]
+}
