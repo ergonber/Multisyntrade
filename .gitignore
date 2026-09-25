@@ -1,0 +1,22 @@
+# Supabase temp / link
+supabase/.temp/
+
+# Secrets / env
+.env
+.env.*
+.secrets/
+*.key
+
+# Node
+node_modules/
+
+# Flutter / Dart
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+*.iml
+
+# OS
+.DS_Store
