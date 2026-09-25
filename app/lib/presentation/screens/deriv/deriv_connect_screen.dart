@@ -48,7 +48,7 @@ class _DerivConnectScreenState extends State<DerivConnectScreen> {
     try {
       // Determine redirect target based on platform
       final redirectTarget = kIsWeb
-          ? 'https://multisyntrade.vercel.app/deriv-callback'
+          ? 'https://multisyntrade.vercel.app'
           : 'syntrade://deriv-callback';
 
       // Call Edge Function to get auth URL (client_id stays in backend)

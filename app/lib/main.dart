@@ -135,7 +135,7 @@ void _handleWebDerivCallback() {
     final uri = Uri.base;
     final status = uri.queryParameters['status'];
 
-    if (status != null && uri.path == '/deriv-callback') {
+    if (status != null) {
       debugPrint('[WebCallback] Deriv status: $status');
 
       final derivProvider = navigatorKey.currentContext?.read<DerivProvider>();
