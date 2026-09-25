@@ -5,7 +5,6 @@ import '../../../config/app_colors.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
-import '../../providers/deriv_provider.dart';
 
 class CapitalRiskScreen extends StatefulWidget {
   const CapitalRiskScreen({super.key});
@@ -85,28 +84,7 @@ class _CapitalRiskScreenState extends State<CapitalRiskScreen> {
 
     final capital = double.tryParse(_capitalController.text) ?? 0;
 
-    final deriv = context.read<DerivProvider>();
-    if (!deriv.isConnected) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Conectá tu cuenta Deriv para configurar tu capital.'),
-          backgroundColor: AppColors.negative,
-        ),
-      );
-      return;
-    }
-    if (capital > deriv.account.balance) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Tu capital no puede superar tu saldo Deriv (\$${deriv.account.balance.toStringAsFixed(2)}).',
-          ),
-          backgroundColor: AppColors.negative,
-        ),
-      );
-      return;
-    }
-
+    profileProvider.clearError();
     await profileProvider.setCapital(userId, capital);
     await profileProvider.setRisk(userId, _riskPct);
 
@@ -119,6 +97,12 @@ class _CapitalRiskScreenState extends State<CapitalRiskScreen> {
           ),
         );
       } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Capital y riesgo guardados.'),
+            backgroundColor: AppColors.primary,
+          ),
+        );
         Navigator.pop(context);
       }
     }
@@ -159,11 +143,7 @@ class _CapitalRiskScreenState extends State<CapitalRiskScreen> {
                   if (v == null || v.isEmpty) return 'Ingresá tu capital';
                   final n = double.tryParse(v);
                   if (n == null) return 'Número inválido';
-                  if (n < 1) return 'Mínimo \$1';
-                  final deriv = context.read<DerivProvider>();
-                  if (deriv.isConnected && n > deriv.account.balance) {
-                    return 'No puede superar tu saldo Deriv (\$${deriv.account.balance.toStringAsFixed(2)})';
-                  }
+                  if (n <= 0) return 'El capital debe ser mayor a 0';
                   return null;
                 },
               ),
@@ -172,23 +152,6 @@ class _CapitalRiskScreenState extends State<CapitalRiskScreen> {
                 'Este dato lo declarás vos. SynTrade no lo verifica.',
                 style: TextStyle(color: Colors.grey[600], fontSize: 12, fontStyle: FontStyle.italic),
               ),
-              Builder(builder: (context) {
-                final deriv = context.watch<DerivProvider>();
-                if (!deriv.isConnected) {
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text('Conectá tu cuenta Deriv para validar tu capital.',
-                        style: TextStyle(color: AppColors.warning, fontSize: 12)),
-                  );
-                }
-                return Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    'Saldo disponible en Deriv: \$${deriv.account.balance.toStringAsFixed(2)} ${deriv.account.currency}',
-                    style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                );
-              }),
               const SizedBox(height: 32),
               const Text('PORCENTAJE DE RIESGO',
                   style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w500)),
