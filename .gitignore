@@ -23,3 +23,7 @@ node_modules/
 
 # Telegram userbot session
 *.session
+
+# Python venv
+.venv/
+tg-reader/.venv/
