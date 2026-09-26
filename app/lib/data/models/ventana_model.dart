@@ -45,7 +45,14 @@ class VentanaModel {
   bool get isPerdida => resultado == 'perdida';
   bool get isSinOperar => resultado == 'sin_operar';
 
-  String get directionLabel => isCompra ? 'ALZA' : 'BAJA';
+  String get directionLabel => isCompra ? 'COMPRA' : 'VENTA';
+
+  /// `senal_apertura` viene como ISO-8601 desde PostgREST y desde Realtime.
+  DateTime? get senalAperturaDate =>
+      senalApertura != null ? DateTime.tryParse(senalApertura!) : null;
+
+  DateTime get sortDate => senalAperturaDate ?? fechaInicio;
+
   String get estadoLabel {
     switch (estado) {
       case 'programada': return 'Programada';

@@ -6,6 +6,21 @@ import '../../../core/errors/app_exception.dart';
 class VentanasRepository {
   final SupabaseClient _client = SupabaseService.client;
 
+  /// Todas las ventanas visibles para el usuario, ordenadas por la señal de
+  /// apertura (la más reciente primero). Las que nunca abrieron quedan al final.
+  Future<List<VentanaModel>> getAllVentanas() async {
+    try {
+      final response = await _client
+          .from('ventanas_senales')
+          .select()
+          .order('senal_apertura', ascending: false, nullsFirst: false)
+          .order('fecha_inicio', ascending: false, nullsFirst: false);
+      return (response as List).map((e) => VentanaModel.fromMap(e)).toList();
+    } catch (e) {
+      throw const ServerException(message: 'Error al obtener señales');
+    }
+  }
+
   Future<List<VentanaModel>> getActiveVentanas() async {
     try {
       final response = await _client
@@ -15,7 +30,7 @@ class VentanasRepository {
           .order('fecha_inicio', ascending: false);
       return (response as List).map((e) => VentanaModel.fromMap(e)).toList();
     } catch (e) {
-      throw ServerException(message: 'Error al obtener ventanas activas');
+      throw const ServerException(message: 'Error al obtener ventanas activas');
     }
   }
 
@@ -28,7 +43,7 @@ class VentanasRepository {
           .order('fecha_inicio', ascending: false);
       return (response as List).map((e) => VentanaModel.fromMap(e)).toList();
     } catch (e) {
-      throw ServerException(message: 'Error al obtener ventanas programadas');
+      throw const ServerException(message: 'Error al obtener ventanas programadas');
     }
   }
 
@@ -41,7 +56,7 @@ class VentanasRepository {
           .order('fecha_inicio', ascending: false);
       return (response as List).map((e) => VentanaModel.fromMap(e)).toList();
     } catch (e) {
-      throw ServerException(message: 'Error al obtener historial');
+      throw const ServerException(message: 'Error al obtener historial');
     }
   }
 }
