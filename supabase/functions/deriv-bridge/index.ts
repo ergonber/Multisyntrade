@@ -320,12 +320,24 @@ async function closeVentana(
   ventanaId: string,
   r: string,
 ): Promise<{ closed: number; totalProfit: number }> {
-  const { data: execs } = await admin
+  let { data: execs } = await admin
     .from("auto_trade_executions")
     .select("id, contract_id, user_id, monto")
     .eq("ventana_id", ventanaId)
     .eq("estado", "en_curso")
     .not("contract_id", "is", null);
+
+  // Carrera: el cierre puede llegar mientras la compra esta en curso (aun sin contract_id).
+  // Reintentar una vez tras esperar para captar la ejecucion ya abierta.
+  if (!execs?.length) {
+    await new Promise((res) => setTimeout(res, 6000));
+    ({ data: execs } = await admin
+      .from("auto_trade_executions")
+      .select("id, contract_id, user_id, monto")
+      .eq("ventana_id", ventanaId)
+      .eq("estado", "en_curso")
+      .not("contract_id", "is", null));
+  }
 
   if (!execs?.length) { log("CLOSE", r, `ventana=${ventanaId}: no open executions`); return { closed: 0, totalProfit: 0 }; }
 
