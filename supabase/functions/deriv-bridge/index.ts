@@ -120,6 +120,12 @@ async function executeForVentana(
   r: string,
 ): Promise<{ executed: number; rejected: number }> {
   const contractType = vent.direccion === "compra" ? "MULTUP" : "MULTDOWN";
+  // Mapeo de nombre del canal -> simbolo real de Deriv (150/300 llevan sufijo N).
+  const DERIV_SYMBOL_MAP: Record<string, string> = {
+    BOOM150: "BOOM150N", BOOM300: "BOOM300N",
+    CRASH150: "CRASH150N", CRASH300: "CRASH300N",
+  };
+  const tradeSymbol: string = DERIV_SYMBOL_MAP[vent.deriv_symbol] ?? vent.deriv_symbol;
 
   // Find eligible users
   const { data: profiles, error: pErr } = await admin
@@ -210,10 +216,10 @@ async function executeForVentana(
         }
 
         // Validate contract support + compute multiplier from allowed range
-        const cfResp = await wsSend(ws, { contracts_for: vent.deriv_symbol }) as any;
+        const cfResp = await wsSend(ws, { contracts_for: tradeSymbol }) as any;
         const contracts = cfResp?.contracts_for?.available ?? [];
         const multContract = contracts.find((c: any) => c.contract_type === contractType);
-        if (!multContract) throw new Error(`${vent.deriv_symbol} no soporta ${contractType}`);
+        if (!multContract) throw new Error(`${tradeSymbol} no soporta ${contractType}`);
 
         const mr: any = multContract.multiplier_range;
         const allowed: number[] = Array.isArray(mr) ? mr : (mr?.values ?? []);
@@ -222,7 +228,7 @@ async function executeForVentana(
         // Get proposal
         const propResp = await wsSend(ws, {
           proposal: 1, amount, basis: "stake", contract_type: contractType,
-          currency: "USD", multiplier, underlying_symbol: vent.deriv_symbol,
+          currency: "USD", multiplier, underlying_symbol: tradeSymbol,
         }) as any;
         const proposalId = propResp?.proposal?.id;
         if (!proposalId) throw new Error(`No proposal: ${JSON.stringify(propResp)}`);
@@ -256,6 +262,11 @@ async function executeForVentana(
         await admin.from("auto_trade_executions")
           .update({ estado: unsupported ? "cancelada" : "rechazada", execution_id: msg.substring(0, 200) })
           .eq("id", execId);
+        if (unsupported) {
+          await admin.from("ventanas_senales")
+            .update({ estado: "cancelada", resultado: "sin_operar", senal_cierre: new Date().toISOString() })
+            .eq("id", vent.id);
+        }
       }
       logE("EXEC", r, `FAIL user=${userId}: ${String(e)}`);
       return "rejected" as const;

@@ -51,11 +51,11 @@ const RESULT_BY_REASON: Record<string, "ganada" | "perdida"> = {
   no_operar: "perdida",
 };
 
-// Solo estos índices ofrecen contratos MULTUP/MULTDOWN en la cuenta Deriv (Options).
-// Boom/Crash 150 y 300 NO los ofrece -> se ignoran para no dejar señales colgadas.
+// Indices que el canal opera y que el bridge puede ejecutar en la cuenta Deriv.
+// (150 y 300 se mapean a BOOMxxxN / CRASHxxxN dentro del deriv-bridge.)
 const SUPPORTED_SYMBOLS = new Set([
-  "BOOM50", "BOOM500", "BOOM600", "BOOM900", "BOOM1000",
-  "CRASH50", "CRASH500", "CRASH600", "CRASH900", "CRASH1000",
+  "BOOM50", "BOOM150", "BOOM300", "BOOM500", "BOOM600", "BOOM900", "BOOM1000",
+  "CRASH50", "CRASH150", "CRASH300", "CRASH500", "CRASH600", "CRASH900", "CRASH1000",
 ]);
 
 serve(async (req) => {
