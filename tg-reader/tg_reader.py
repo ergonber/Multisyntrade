@@ -11,6 +11,9 @@ import re
 import json
 import time
 import asyncio
+import threading
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from datetime import datetime
 from dotenv import load_dotenv
 from telethon import TelegramClient, events, functions
@@ -23,8 +26,13 @@ SESSION = os.environ.get("TELEGRAM_SESSION", "tg_reader")
 CHANNEL = os.environ.get("TELEGRAM_CHANNEL", "DERIV INDEX PRO")
 MT5_FILES = os.environ["MT5_FILES_DIR"]
 OUT = os.path.join(MT5_FILES, "tg_signals.txt")
+HTTP_PORT = int(os.environ.get("HTTP_PORT", "8765"))
+INGEST_URL = os.environ.get("INGEST_URL", "")
+INGEST_KEY = os.environ.get("INGEST_API_KEY", "")
 
-_TOPICS = {}  # topic_id -> "Boom 900"
+_TOPICS = {}   # topic_id -> "Boom 900"
+_SIGNALS = []  # eventos en memoria (para el EA por HTTP)
+_LOCK = threading.Lock()
 
 
 def log(*a):
@@ -37,16 +45,70 @@ def sym_key(title: str):
     return t
 
 
+def post_syntrade(ev: dict):
+    if not INGEST_URL:
+        return
+    try:
+        req = urllib.request.Request(
+            INGEST_URL,
+            data=json.dumps(ev, separators=(",", ":")).encode("utf-8"),
+            headers={"Content-Type": "application/json", "x-api-key": INGEST_KEY},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as r:
+            log("POST", r.status, r.read(120).decode("utf-8", "ignore"))
+    except Exception as ex:
+        log("POST err:", repr(ex))
+
+
 def write_event(ev: dict):
     ev["ts"] = int(time.time() * 1000)
-    line = json.dumps(ev, ensure_ascii=False)
-    with open(OUT, "a", encoding="utf-8") as f:
-        f.write(line + "\n")
-        f.flush()
+    line = json.dumps(ev, ensure_ascii=False, separators=(",", ":"))
+    try:
+        with open(OUT, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+            f.flush()
+    except Exception as ex:
+        log("file err:", ex)
+    with _LOCK:
+        _SIGNALS.append(ev)
     log("->", line)
+    post_syntrade(ev)
 
 
-def parse_and_write(symbol, text):
+class _SigHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path.startswith("/count"):
+            with _LOCK:
+                c = len(_SIGNALS)
+            b = str(c).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+            return
+        m = re.search(r"from=(\d+)", self.path)
+        from_idx = int(m.group(1)) if m else 0
+        with _LOCK:
+            data = list(_SIGNALS[from_idx:])
+        body = "\n".join(json.dumps(e, ensure_ascii=False, separators=(",", ":")) for e in data)
+        b = body.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(b)))
+        self.end_headers()
+        self.wfile.write(b)
+
+    def log_message(self, *a):
+        pass
+
+
+def start_http():
+    ThreadingHTTPServer(("127.0.0.1", HTTP_PORT), _SigHandler).serve_forever()
+
+
+def parse_and_write(symbol, text, msg_id=None):
     if not symbol:
         log("(sin simbolo) mensaje:", text[:80])
         return
@@ -76,12 +138,15 @@ def parse_and_write(symbol, text):
     t2 = re.search(r"TP2:\s*([\d.]+)", text)
     if e and t1:
         direction = "compra" if "Compra" in text else "venta"
-        write_event({
+        ev = {
             "type": "entry", "symbol": sym, "direction": direction,
             "entry": float(e.group(1)),
             "tp1": float(t1.group(1)),
             "tp2": float(t2.group(1)) if t2 else None,
-        })
+        }
+        if msg_id is not None:
+            ev["signal_id"] = str(msg_id)
+        write_event(ev)
         return
     log("(ignorado)", text[:80])
 
@@ -99,17 +164,33 @@ async def find_channel(client, name):
 
 async def load_topics(client, entity):
     try:
-        res = await client(functions.channels.GetForumTopicsRequest(
-            channel=entity, offset_date=None, offset_id=0, offset_topic=0, limit=100))
+        res = await client(functions.messages.GetForumTopicsRequest(
+            peer=entity, offset_date=None, offset_id=0, offset_topic=0, limit=100))
         for t in res.topics:
             _TOPICS[t.id] = t.title
-        log("Temas:", list(_TOPICS.values()))
+            log(f"TEMA id={t.id} -> {t.title}")
+        log("Total temas:", len(_TOPICS))
     except Exception as ex:
-        log("Sin temas (o no es foro):", ex)
+        log("Sin temas (o no es foro):", repr(ex))
+
+
+async def topic_title(client, entity, tid):
+    if tid in _TOPICS:
+        return _TOPICS[tid]
+    try:
+        res = await client(functions.messages.GetForumTopicsByIDRequest(peer=entity, topics=[tid]))
+        for t in res.topics:
+            _TOPICS[t.id] = t.title
+            log(f"TEMA(cargado) id={t.id} -> {t.title}")
+    except Exception as ex:
+        log("topic_title err:", repr(ex))
+    return _TOPICS.get(tid)
 
 
 async def main():
     os.makedirs(MT5_FILES, exist_ok=True)
+    threading.Thread(target=start_http, daemon=True).start()
+    log(f"HTTP server en http://127.0.0.1:{HTTP_PORT}/signals?from=N")
     client = TelegramClient(SESSION, API_ID, API_HASH)
     await client.start()
     log("Conectado. Buscando canal:", CHANNEL)
@@ -125,7 +206,11 @@ async def main():
         if rt is not None:
             topic_id = getattr(rt, "reply_to_top_id", None) or getattr(rt, "reply_to_msg_id", None)
         symbol = _TOPICS.get(topic_id)
-        parse_and_write(symbol, msg.message or "")
+        if symbol is None and topic_id is not None:
+            symbol = await topic_title(client, entity, topic_id)
+        if symbol is None:
+            log(f"(topic_id={topic_id}) no mapeado. Temas: {_TOPICS}")
+        parse_and_write(symbol, msg.message or "", getattr(msg, "id", None))
 
     log("Escuchando mensajes...")
     await client.run_until_disconnected()

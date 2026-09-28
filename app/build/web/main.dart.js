@@ -31114,7 +31114,7 @@ return s},
 asV(){var s=0,r=A.r(t.H),q
 var $async$asV=A.t(function(a,b){if(a===1)return A.o(b,r)
 for(;;)switch(s){case 0:s=2
-return A.l(A.at7("",B.Kz,""),$async$asV)
+return A.l(A.at7("sb_publishable_Vg0eezYHEQ_j3zjK8p0s5A_KqJIO_hU",B.Kz,"https://fpmtysxmxvzkuplnvduu.supabase.co"),$async$asV)
 case 2:q=$.ii().b
 q===$&&A.a()
 $.fI=q

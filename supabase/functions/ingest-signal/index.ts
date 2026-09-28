@@ -31,6 +31,26 @@ async function callBridge(action: "execute" | "close", ventanaId: string): Promi
   }
 }
 
+function pickPayload(body: Record<string, unknown>): Record<string, unknown> {
+  if (body && typeof body.type === "string") return body;
+  for (const key of ["entry", "close"] as const) {
+    const nested = body?.[key];
+    if (nested && typeof nested === "object" && typeof (nested as Record<string, unknown>).type === "string") {
+      return nested as Record<string, unknown>;
+    }
+  }
+  return body;
+}
+
+const RESULT_BY_REASON: Record<string, "ganada" | "perdida"> = {
+  profit: "ganada",
+  tp: "ganada",
+  tp1: "ganada",
+  tp2: "ganada",
+  gold: "perdida",
+  no_operar: "perdida",
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -48,8 +68,8 @@ serve(async (req) => {
       return json({ ok: false, error: "Invalid JSON body" }, 400);
     }
 
-    const payload = (body.entry ?? body.close ?? body) as Record<string, unknown>;
-    const type = payload?.type;
+    const payload = pickPayload(body);
+    const type = String(payload?.type ?? "");
 
     const admin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -57,11 +77,11 @@ serve(async (req) => {
     );
 
     if (type === "entry") {
-      const { signal_id, symbol, direction } = payload as {
-        signal_id?: unknown; symbol?: unknown; direction?: unknown;
-      };
+      const symbol = payload.symbol;
+      const direction = payload.direction;
+      const signalId = payload.signal_id;
 
-      if (!signal_id || !symbol || !direction) {
+      if (!symbol || !direction) {
         return json({ ok: false, error: "Missing required fields" }, 400);
       }
       if (direction !== "compra" && direction !== "venta") {
@@ -74,16 +94,19 @@ serve(async (req) => {
         return json({ ok: false, error: "Simbolo no soportado" }, 400);
       }
 
+      const extId = signalId ? String(signalId) : `${sym}-${Date.now()}`;
+      const now = new Date().toISOString();
+
       const { data: inserted, error } = await admin
         .from("ventanas_senales")
         .insert({
-          deriv_symbol: String(symbol),
+          deriv_symbol: sym,
           tipo,
           direccion: String(direction),
           estado: "activa",
-          senal_apertura: new Date().toISOString(),
-          fecha_inicio: new Date().toISOString(),
-          external_signal_id: String(signal_id),
+          senal_apertura: now,
+          fecha_inicio: now,
+          external_signal_id: extId,
         })
         .select("id")
         .single();
@@ -99,22 +122,33 @@ serve(async (req) => {
     }
 
     if (type === "close") {
-      const { signal_id, result } = payload as {
-        signal_id?: unknown; result?: unknown;
-      };
+      const signalId = payload.signal_id;
+      const symbol = payload.symbol;
+      let result = payload.result;
 
-      if (!signal_id || !result) {
-        return json({ ok: false, error: "Missing required fields" }, 400);
+      if (!result && payload.reason) {
+        result = RESULT_BY_REASON[String(payload.reason).toLowerCase()] ?? null;
       }
       if (result !== "ganada" && result !== "perdida") {
         return json({ ok: false, error: "Resultado invalido" }, 400);
       }
 
-      const { data: ventana } = await admin
+      let query = admin
         .from("ventanas_senales")
         .select("id")
-        .eq("external_signal_id", String(signal_id))
-        .eq("estado", "activa")
+        .eq("estado", "activa");
+
+      if (signalId) {
+        query = query.eq("external_signal_id", String(signalId));
+      } else if (symbol) {
+        query = query.eq("deriv_symbol", String(symbol).toUpperCase());
+      } else {
+        return json({ ok: false, error: "Missing signal_id or symbol" }, 400);
+      }
+
+      const { data: ventana } = await query
+        .order("senal_apertura", { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (!ventana) {
@@ -134,6 +168,10 @@ serve(async (req) => {
 
       await callBridge("close", ventana.id);
 
+      return json({ ok: true });
+    }
+
+    if (type === "no_operar" || type === "habilitar") {
       return json({ ok: true });
     }
 
