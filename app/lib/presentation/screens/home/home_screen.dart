@@ -12,7 +12,6 @@ import '../../../data/models/trade_execution_model.dart';
 import '../signals/signals_screen.dart';
 import '../profile/profile_screen.dart';
 import '../deriv/deriv_connect_screen.dart';
-import '../profile/capital_risk_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -113,47 +112,11 @@ class _DashboardTabState extends State<_DashboardTab> {
   }
 
   List<Widget> _buildSetupBanners(ProfileProvider profile, DerivProvider deriv) {
-    final p = profile.profile;
-    final needsCapital = p == null || !p.hasCapital;
     final needsDeriv = !deriv.isConnected;
 
-    if (!needsCapital && !needsDeriv) return [];
+    if (!needsDeriv) return [];
 
     return [
-      if (needsCapital)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: AppCard(
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppColors.warning.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.account_balance_wallet_outlined, color: AppColors.warning, size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Configurá tu capital y riesgo para empezar a operar.',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-                      const SizedBox(height: 4),
-                      TextButton(
-                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CapitalRiskScreen())),
-                        style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                        child: const Text('CONFIGURAR AHORA', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       if (needsDeriv)
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
@@ -496,7 +459,7 @@ class _BalanceCard extends StatelessWidget {
     final capital = profile?.capitalInicial ?? 0.0;
     final ganancia = profile?.gananciaAcumulada ?? 0.0;
     final derivBalance = deriv.isConnected ? deriv.account.balance : 0.0;
-    final totalBalance = deriv.isConnected ? derivBalance : (capital + ganancia);
+    final totalBalance = deriv.isConnected ? derivBalance : capital;
 
     return Container(
       width: double.infinity,
@@ -513,7 +476,7 @@ class _BalanceCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            deriv.isConnected ? 'SALDO DERIV' : 'CAPITAL TOTAL ESTIMADO',
+            deriv.isConnected ? 'SALDO DERIV' : 'CAPITAL DERIV (último saldo)',
             style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 8),

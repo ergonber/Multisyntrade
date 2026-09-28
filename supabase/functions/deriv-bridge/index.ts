@@ -135,9 +135,8 @@ async function executeForVentana(
   // Find eligible users
   const { data: profiles, error: pErr } = await admin
     .from("profiles")
-    .select("id, capital_inicial, risk_percentage")
-    .eq("capital_inicial_configurado", true)
-    .gt("capital_inicial", 0);
+    .select("id, risk_percentage")
+    .eq("capital_inicial_configurado", true);
 
   if (pErr) { logE("EXEC", r, `profiles query error: ${pErr.message}`); return { executed: 0, rejected: 0 }; }
   if (!profiles?.length) { log("EXEC", r, "no eligible profiles"); return { executed: 0, rejected: 0 }; }
@@ -189,23 +188,12 @@ async function executeForVentana(
       return "skip" as const;
     }
 
-    // Calculate amount: capital * (risk / 100), con riesgo acotado a [1%, 2%]
+    // Riesgo fijo (proteccion de capital)
     let riskPct = Number(prof.risk_percentage) || MIN_RISK_PCT;
     riskPct = Math.min(Math.max(riskPct, MIN_RISK_PCT), MAX_RISK_PCT);
-    const capital = Number(prof.capital_inicial) || 0;
-    const amount = Math.round(capital * (riskPct / 100) * 100) / 100;
-    if (amount <= 0) {
-      log("EXEC", r, `user ${userId}: amount=0 (capital=${capital}, risk=${riskPct}%), skip`);
-      return "skip" as const;
-    }
 
-    // Insert PENDING row before attempting trade
-    const { data: pend } = await admin.from("auto_trade_executions").insert({
-      user_id: userId, ventana_id: vent.id, deriv_symbol: vent.deriv_symbol,
-      activo: vent.tipo, monto: amount,
-      contract_id: null, estado: "pendiente", resultado: 0,
-    }).select("id").single();
-    const execId = pend?.id;
+    let amount = 0;
+    let execId: string | undefined;
     let boughtContractId: string | null = null;
     let multiplier = 1;
 
@@ -225,11 +213,23 @@ async function executeForVentana(
           setTimeout(() => rej(new Error("ws_connect_timeout")), 10_000);
         });
 
-        // Check available balance
+        // Saldo real -> base del monto (el capital refleja la cuenta Deriv)
         const balResp = await wsSend(ws, { balance: 1 }) as any;
         const balance = Number(balResp?.balance?.balance ?? 0);
-        if (balance > 0 && amount > balance) {
-          throw new Error(`saldo insuficiente (monto $${amount} > saldo $${balance})`);
+        amount = Math.round(balance * (riskPct / 100) * 100) / 100;
+        if (amount <= 0) throw new Error(`saldo insuficiente (saldo $${balance})`);
+        if (amount > balance) throw new Error(`saldo insuficiente (monto $${amount} > saldo $${balance})`);
+
+        // Sincronizar el capital del perfil con el saldo real de Deriv
+        await admin.from("profiles").update({ capital_inicial: balance }).eq("id", userId);
+
+        // Fila pendiente (una sola vez, aunque haya reintentos)
+        if (!execId) {
+          const { data: pend } = await admin.from("auto_trade_executions").insert({
+            user_id: userId, ventana_id: vent.id, deriv_symbol: vent.deriv_symbol,
+            activo: vent.tipo, monto: amount, contract_id: null, estado: "pendiente", resultado: 0,
+          }).select("id").single();
+          execId = pend?.id;
         }
 
         // Validate contract support + compute multiplier from allowed range

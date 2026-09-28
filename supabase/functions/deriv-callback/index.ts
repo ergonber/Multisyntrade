@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
   );
   if (saveErr) return redirectTo(target, "error", "save_failed");
 
-  await admin.from("profiles").update({ deriv_connection_status: "connected" }).eq("id", st.user_id);
+  await admin.from("profiles").update({ deriv_connection_status: "connected", capital_inicial_configurado: true }).eq("id", st.user_id);
 
   await admin.from("deriv_oauth_states").delete().eq("state", state);
   return redirectTo(target, "ok");

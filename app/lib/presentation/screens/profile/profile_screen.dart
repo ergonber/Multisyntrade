@@ -8,7 +8,6 @@ import '../../../core/widgets/app_card.dart';
 import '../auth/login_screen.dart';
 import '../deriv/deriv_connect_screen.dart';
 import '../admin/admin_shell.dart';
-import 'capital_risk_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -69,12 +68,6 @@ class ProfileScreen extends StatelessWidget {
               title: 'Mi Plan',
               badge: _planBadgeLabel(auth),
               badgeColor: _planBadgeColor(auth),
-            ),
-            const SizedBox(height: 12),
-            _ProfileMenuItem(
-              icon: Icons.account_balance,
-              title: 'Capital y Riesgo',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CapitalRiskScreen())),
             ),
             const SizedBox(height: 12),
             const _ProfileMenuItem(
