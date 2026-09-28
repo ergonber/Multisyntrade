@@ -263,6 +263,22 @@ async function executeForVentana(
         .update({ estado: "en_curso", contract_id: contractId, execution_id: contractId })
         .eq("id", execId);
 
+      // Reconciliar carrera: si la ventana ya se cerro mientras comprabamos, vender ya.
+      const { data: vNow } = await admin.from("ventanas_senales").select("estado").eq("id", vent.id).single();
+      if (vNow?.estado === "cerrada" && ws && execId) {
+        try {
+          const sellResp = await wsSend(ws, { sell: contractId, price: 0 }) as any;
+          const profit = Number(sellResp?.sell?.sold_for ?? 0) - amount;
+          const estado = profit >= 0 ? "ganada" : "perdida";
+          await admin.from("auto_trade_executions").update({ estado, resultado: profit }).eq("id", execId);
+          await admin.rpc("register_close", { p_user_id: userId, p_profit: profit });
+          log("EXEC", r, `user=${userId} contrato ${contractId} vendido por cierre concurrente profit=${profit}`);
+          return "executed" as const;
+        } catch (e) {
+          logE("EXEC", r, `user=${userId} reconcile sell fail: ${String(e)}`);
+        }
+      }
+
       log("EXEC", r, `OK user=${userId} amount=${amount} mult=${multiplier} contract=${contractId}`);
       return "executed" as const;
     } catch (e) {
@@ -351,7 +367,7 @@ async function closeVentana(
         .eq("id", exec.id);
 
       // Atomic increment of ganancia_acumulada
-      await admin.rpc("add_ganancia", { p_user_id: exec.user_id, p_delta: profit });
+      await admin.rpc("register_close", { p_user_id: exec.user_id, p_profit: profit });
 
       log("CLOSE", r, `exec=${exec.id} profit=${profit}`);
       return { profit, closed: true } as const;

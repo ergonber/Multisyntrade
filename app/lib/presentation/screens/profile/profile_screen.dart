@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../config/app_colors.dart';
 import '../../../config/app_config.dart';
 import '../../providers/auth_provider.dart';
+import 'history_screen.dart';
 import '../../providers/profile_provider.dart';
 import '../../../core/widgets/app_card.dart';
 import '../auth/login_screen.dart';
@@ -75,7 +76,7 @@ class ProfileScreen extends StatelessWidget {
               title: 'Objetivos Financieros',
             ),
             const SizedBox(height: 12),
-            const _ProfileMenuItem(icon: Icons.history, title: 'Historial'),
+            _ProfileMenuItem(icon: Icons.history, title: 'Historial', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HistoryScreen()))),
             const SizedBox(height: 12),
             const _ProfileMenuItem(icon: Icons.notifications_outlined, title: 'Notificaciones'),
             const SizedBox(height: 12),

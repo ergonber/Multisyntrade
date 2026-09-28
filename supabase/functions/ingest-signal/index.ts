@@ -156,32 +156,56 @@ serve(async (req) => {
         return json({ ok: false, error: "Missing signal_id or symbol" }, 400);
       }
 
-      const { data: ventana } = await query
-        .order("senal_apertura", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const { data: ventanas } = await query;
 
-      if (!ventana) {
+      if (!ventanas?.length) {
         return json({ ok: true, not_found: true });
       }
 
-      const { error } = await admin
-        .from("ventanas_senales")
-        .update({
-          estado: "cerrada",
-          resultado: String(result),
-          senal_cierre: new Date().toISOString(),
-        })
-        .eq("id", ventana.id);
+      const now = new Date().toISOString();
+      for (const v of ventanas) {
+        await admin
+          .from("ventanas_senales")
+          .update({
+            estado: "cerrada",
+            resultado: String(result),
+            senal_cierre: now,
+          })
+          .eq("id", v.id);
+        await callBridge("close", v.id);
+      }
 
-      if (error) throw error;
-
-      await callBridge("close", ventana.id);
-
-      return json({ ok: true });
+      return json({ ok: true, closed: ventanas.length });
     }
 
-    if (type === "no_operar" || type === "habilitar") {
+    if (type === "no_operar") {
+      const symbol = payload.symbol;
+      if (!symbol) {
+        return json({ ok: false, error: "Missing symbol" }, 400);
+      }
+      const sym = String(symbol).toUpperCase();
+      const { data: ventanas } = await admin
+        .from("ventanas_senales")
+        .select("id")
+        .eq("estado", "activa")
+        .eq("deriv_symbol", sym);
+
+      if (!ventanas?.length) {
+        return json({ ok: true, not_found: true });
+      }
+
+      const now = new Date().toISOString();
+      for (const v of ventanas) {
+        await admin
+          .from("ventanas_senales")
+          .update({ estado: "cerrada", resultado: "sin_operar", senal_cierre: now })
+          .eq("id", v.id);
+        await callBridge("close", v.id);
+      }
+      return json({ ok: true, closed: ventanas.length });
+    }
+
+    if (type === "habilitar") {
       return json({ ok: true });
     }
 
