@@ -215,7 +215,8 @@ async function executeForVentana(
         const multContract = contracts.find((c: any) => c.contract_type === contractType);
         if (!multContract) throw new Error(`${vent.deriv_symbol} no soporta ${contractType}`);
 
-        const allowed = multContract.multiplier_range?.values ?? [];
+        const mr: any = multContract.multiplier_range;
+        const allowed: number[] = Array.isArray(mr) ? mr : (mr?.values ?? []);
         multiplier = allowed.length ? Math.min(...allowed) : 1;
 
         // Get proposal
@@ -250,8 +251,10 @@ async function executeForVentana(
           .eq("id", execId);
         if (updErr) logE("EXEC", r, `user=${userId}: contrato ${boughtContractId} comprado pero update falló (${updErr.message}); queda para reconciliar`);
       } else if (execId) {
+        const msg = String(e);
+        const unsupported = /no soporta|no contract available/i.test(msg);
         await admin.from("auto_trade_executions")
-          .update({ estado: "rechazada", execution_id: String(e).substring(0, 200) })
+          .update({ estado: unsupported ? "cancelada" : "rechazada", execution_id: msg.substring(0, 200) })
           .eq("id", execId);
       }
       logE("EXEC", r, `FAIL user=${userId}: ${String(e)}`);

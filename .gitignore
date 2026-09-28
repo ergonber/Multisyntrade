@@ -23,6 +23,7 @@ node_modules/
 
 # Telegram userbot session
 *.session
+*.session-journal
 
 # Python venv
 .venv/

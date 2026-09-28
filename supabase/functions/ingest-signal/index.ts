@@ -51,6 +51,13 @@ const RESULT_BY_REASON: Record<string, "ganada" | "perdida"> = {
   no_operar: "perdida",
 };
 
+// Solo estos índices ofrecen contratos MULTUP/MULTDOWN en la cuenta Deriv (Options).
+// Boom/Crash 150 y 300 NO los ofrece -> se ignoran para no dejar señales colgadas.
+const SUPPORTED_SYMBOLS = new Set([
+  "BOOM50", "BOOM500", "BOOM600", "BOOM900", "BOOM1000",
+  "CRASH50", "CRASH500", "CRASH600", "CRASH900", "CRASH1000",
+]);
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -92,6 +99,9 @@ serve(async (req) => {
       const tipo = sym.includes("BOOM") ? "boom" : sym.includes("CRASH") ? "crash" : null;
       if (!tipo) {
         return json({ ok: false, error: "Simbolo no soportado" }, 400);
+      }
+      if (!SUPPORTED_SYMBOLS.has(sym)) {
+        return json({ ok: true, ignored: true, reason: "Simbolo no operable en la cuenta" });
       }
 
       const extId = signalId ? String(signalId) : `${sym}-${Date.now()}`;
