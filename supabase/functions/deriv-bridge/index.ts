@@ -19,9 +19,17 @@ type SupabaseClient = ReturnType<typeof createClient>;
 const CONCURRENCY = 25;
 
 /* ---------- Limites de proteccion de capital ---------- */
-const MIN_RISK_PCT = 1;
-const MAX_RISK_PCT = 1;
 const MAX_OPEN_POSITIONS = 10;
+
+// Riesgo por tramo de saldo (demo y real):
+// <10 no opera | 10-99: 1% | 100-1000: 5% | 1001-10000: 3% | >10000: 1%
+function riskPercentForBalance(balance: number): number | null {
+  if (balance < 10) return null;
+  if (balance < 100) return 1;
+  if (balance <= 1000) return 5;
+  if (balance <= 10000) return 3;
+  return 1;
+}
 
 async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (x: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length);
@@ -188,10 +196,6 @@ async function executeForVentana(
       return "skip" as const;
     }
 
-    // Riesgo fijo (proteccion de capital)
-    let riskPct = Number(prof.risk_percentage) || MIN_RISK_PCT;
-    riskPct = Math.min(Math.max(riskPct, MIN_RISK_PCT), MAX_RISK_PCT);
-
     let amount = 0;
     let execId: string | undefined;
     let boughtContractId: string | null = null;
@@ -216,6 +220,8 @@ async function executeForVentana(
         // Saldo real -> base del monto (el capital refleja la cuenta Deriv)
         const balResp = await wsSend(ws, { balance: 1 }) as any;
         const balance = Number(balResp?.balance?.balance ?? 0);
+        const riskPct = riskPercentForBalance(balance);
+        if (riskPct === null) throw new Error(`saldo minimo requerido $10 (saldo $${balance})`);
         amount = Math.round(balance * (riskPct / 100) * 100) / 100;
         if (amount <= 0) throw new Error(`saldo insuficiente (saldo $${balance})`);
         if (amount > balance) throw new Error(`saldo insuficiente (monto $${amount} > saldo $${balance})`);

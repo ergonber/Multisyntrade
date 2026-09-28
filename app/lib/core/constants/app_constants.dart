@@ -21,6 +21,16 @@ class AppConstants {
   static const List<double> riskOptions = [1.0];
   static const double defaultRisk = 2.0;
 
+  /// Riesgo por tramo de saldo (debe coincidir con el deriv-bridge).
+  /// < 10 no opera | 10-99: 1% | 100-1000: 5% | 1001-10000: 3% | > 10000: 1%
+  static double? riskPercentForBalance(double balance) {
+    if (balance < 10) return null;
+    if (balance < 100) return 1;
+    if (balance <= 1000) return 5;
+    if (balance <= 10000) return 3;
+    return 1;
+  }
+
   static const int defaultEntryWindowMinutes = 5;
   static const int minEntryWindowMinutes = 1;
   static const int maxEntryWindowMinutes = 60;

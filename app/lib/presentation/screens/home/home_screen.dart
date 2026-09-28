@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../config/app_colors.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/signals_provider.dart';
 import '../../providers/profile_provider.dart';
@@ -460,6 +461,7 @@ class _BalanceCard extends StatelessWidget {
     final ganancia = profile?.gananciaAcumulada ?? 0.0;
     final derivBalance = deriv.isConnected ? deriv.account.balance : 0.0;
     final totalBalance = deriv.isConnected ? derivBalance : capital;
+    final riskPct = AppConstants.riskPercentForBalance(deriv.isConnected ? derivBalance : capital);
 
     return Container(
       width: double.infinity,
@@ -494,7 +496,7 @@ class _BalanceCard extends StatelessWidget {
               ] else ...[
                 _StatItem(label: 'GANANCIA', value: '+\$${ganancia.toStringAsFixed(2)}'),
                 const SizedBox(width: 24),
-                _StatItem(label: 'RIESGO', value: '${profile?.riskPercentage ?? 2}%'),
+                _StatItem(label: 'RIESGO', value: riskPct == null ? '—' : '${riskPct.toInt()}%'),
               ],
             ],
           ),

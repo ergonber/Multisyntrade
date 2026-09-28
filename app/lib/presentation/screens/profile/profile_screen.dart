@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../config/app_colors.dart';
 import '../../../config/app_config.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../providers/auth_provider.dart';
 import 'history_screen.dart';
 import '../../providers/profile_provider.dart';
@@ -48,7 +49,7 @@ class ProfileScreen extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       _buildStat('Capital', '\$${(profile?.capitalInicial ?? 0).toStringAsFixed(0)}'),
-                      _buildStat('Riesgo', '${profile?.riskPercentage ?? 2}%'),
+                      _buildStat('Riesgo', _riskLabel(profile?.capitalInicial ?? 0)),
                       _buildStat('Plan', profile?.rol ?? 'user'),
                     ],
                   ),
@@ -154,6 +155,11 @@ class ProfileScreen extends StatelessWidget {
         Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
       ],
     );
+  }
+
+  String _riskLabel(double balance) {
+    final r = AppConstants.riskPercentForBalance(balance);
+    return r == null ? '—' : '${r.toInt()}%';
   }
 
   String _planBadgeLabel(AuthProvider auth) {
