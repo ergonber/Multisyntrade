@@ -18,6 +18,11 @@ type SupabaseClient = ReturnType<typeof createClient>;
 
 const CONCURRENCY = 25;
 
+/* ---------- Limites de proteccion de capital ---------- */
+const MIN_RISK_PCT = 1;
+const MAX_RISK_PCT = 1;
+const MAX_OPEN_POSITIONS = 10;
+
 async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (x: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let i = 0;
@@ -173,8 +178,20 @@ async function executeForVentana(
       return "skip" as const;
     }
 
-    // Calculate amount: capital * (risk / 100)
-    const riskPct = Number(prof.risk_percentage) || 5;
+    // Limite de posiciones abiertas simultaneas (proteccion de capital)
+    const { count: openCount } = await admin
+      .from("auto_trade_executions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("estado", "en_curso");
+    if ((openCount ?? 0) >= MAX_OPEN_POSITIONS) {
+      log("EXEC", r, `user ${userId}: ya tiene ${openCount} posiciones abiertas (max ${MAX_OPEN_POSITIONS}), skip`);
+      return "skip" as const;
+    }
+
+    // Calculate amount: capital * (risk / 100), con riesgo acotado a [1%, 2%]
+    let riskPct = Number(prof.risk_percentage) || MIN_RISK_PCT;
+    riskPct = Math.min(Math.max(riskPct, MIN_RISK_PCT), MAX_RISK_PCT);
     const capital = Number(prof.capital_inicial) || 0;
     const amount = Math.round(capital * (riskPct / 100) * 100) / 100;
     if (amount <= 0) {

@@ -20,7 +20,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   final _nameController = TextEditingController();
   final _capitalController = TextEditingController();
-  double _riskPercent = 2.0;
+  double _riskPercent = 1.0;
   String _selectedPlan = 'gratis';
 
   static const int _totalSteps = 4;
@@ -321,9 +321,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   child: Slider(
                     value: _riskPercent,
                     min: 1,
-                    max: 10,
-                    divisions: 9,
-                    onChanged: (v) => setState(() => _riskPercent = v),
+                    max: 1,
+                    divisions: null,
+                    onChanged: null,
                   ),
                 ),
                 Row(

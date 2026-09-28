@@ -16,9 +16,9 @@ class CapitalRiskScreen extends StatefulWidget {
 class _CapitalRiskScreenState extends State<CapitalRiskScreen> {
   final _capitalController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  double _riskPct = 2.0;
+  double _riskPct = 1.0;
 
-  static const _riskOptions = [1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0];
+  static const _riskOptions = [1.0];
 
   @override
   void initState() {
@@ -29,7 +29,7 @@ class _CapitalRiskScreenState extends State<CapitalRiskScreen> {
         _capitalController.text = profile.capitalInicial > 0
             ? profile.capitalInicial.toStringAsFixed(2)
             : '';
-        _riskPct = profile.riskPercentage > 0 ? profile.riskPercentage : 2.0;
+        _riskPct = 1.0;
         setState(() {});
       }
     });

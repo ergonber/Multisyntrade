@@ -18,7 +18,7 @@ class AppConstants {
   static const int sessionTimeoutMinutes = 15;
   static const int refreshTokenDays = 30;
 
-  static const List<double> riskOptions = [1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0];
+  static const List<double> riskOptions = [1.0];
   static const double defaultRisk = 2.0;
 
   static const int defaultEntryWindowMinutes = 5;
