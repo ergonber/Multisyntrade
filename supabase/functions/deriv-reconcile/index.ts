@@ -98,6 +98,26 @@ serve(async (req) => {
       }
     }
 
+    // Cerrar ventanas activas cuyas ejecuciones ya terminaron (SL/TP, stop-out, reconciliacion).
+    // Solo si ya tienen al menos una ejecucion y ninguna sigue abierta/en curso.
+    const { data: activas } = await admin.from("ventanas_senales").select("id").eq("estado", "activa");
+    let closedVentanas = 0;
+    for (const v of activas ?? []) {
+      const { count: openCnt } = await admin
+        .from("auto_trade_executions").select("id", { count: "exact", head: true })
+        .eq("ventana_id", v.id).in("estado", ["en_curso", "pendiente"]);
+      if ((openCnt ?? 0) > 0) continue;
+      const { count: total } = await admin
+        .from("auto_trade_executions").select("id", { count: "exact", head: true })
+        .eq("ventana_id", v.id);
+      if ((total ?? 0) === 0) continue;
+      await admin.from("ventanas_senales")
+        .update({ estado: "cerrada", senal_cierre: new Date().toISOString() })
+        .eq("id", v.id);
+      closedVentanas++;
+    }
+    out.ventanas_cerradas = closedVentanas;
+
     return new Response(JSON.stringify(out), { headers: cors });
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: cors });
