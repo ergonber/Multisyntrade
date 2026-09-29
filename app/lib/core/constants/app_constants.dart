@@ -22,12 +22,12 @@ class AppConstants {
   static const double defaultRisk = 2.0;
 
   /// Riesgo por tramo de saldo (debe coincidir con el deriv-bridge).
-  /// < 10 no opera | 10-99: 1% | 100-1000: 5% | 1001-10000: 3% | > 10000: 1%
+  /// < 10 no opera | 10-99: 1% | 100-1000: 3% | 1001-10000: 2% | > 10000: 1%
   static double? riskPercentForBalance(double balance) {
     if (balance < 10) return null;
     if (balance < 100) return 1;
-    if (balance <= 1000) return 5;
-    if (balance <= 10000) return 3;
+    if (balance <= 1000) return 3;
+    if (balance <= 10000) return 2;
     return 1;
   }
 

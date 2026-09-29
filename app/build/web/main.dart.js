@@ -31167,8 +31167,8 @@ try{s=A.yL().ge8().h(0,"admin")
 return s==="1"}catch(r){return!1}},
 aPY(a){if(a<10)return null
 if(a<100)return 1
-if(a<=1000)return 5
-if(a<=1e4)return 3
+if(a<=1000)return 3
+if(a<=1e4)return 2
 return 1},
 b6K(a){var s
 if(a.length===0)return"Ingresa tu correo"

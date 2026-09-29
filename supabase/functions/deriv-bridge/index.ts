@@ -19,15 +19,20 @@ type SupabaseClient = ReturnType<typeof createClient>;
 const CONCURRENCY = 25;
 
 /* ---------- Limites de proteccion de capital ---------- */
-const MAX_OPEN_POSITIONS = 10;
+const MAX_OPEN_POSITIONS = 6;
+
+// Proteccion de posicion (limit_order nativo de Deriv), % del stake.
+// Basado en estadisticas: ganancia promedio ~4-5% del stake, perdida ~6.5% (con colas de 25%+).
+const STOP_LOSS_PCT = 6;
+const TAKE_PROFIT_PCT = 5;
 
 // Riesgo por tramo de saldo (demo y real):
-// <10 no opera | 10-99: 1% | 100-1000: 5% | 1001-10000: 3% | >10000: 1%
+// <10 no opera | 10-99: 1% | 100-1000: 3% | 1001-10000: 2% | >10000: 1%
 function riskPercentForBalance(balance: number): number | null {
   if (balance < 10) return null;
   if (balance < 100) return 1;
-  if (balance <= 1000) return 5;
-  if (balance <= 10000) return 3;
+  if (balance <= 1000) return 3;
+  if (balance <= 10000) return 2;
   return 1;
 }
 
@@ -248,10 +253,15 @@ async function executeForVentana(
         const allowed: number[] = Array.isArray(mr) ? mr : (mr?.values ?? []);
         multiplier = allowed.length ? Math.min(...allowed) : 1;
 
+        // Proteccion: stop-loss y take-profit nativos (montos en USD)
+        const stopLoss = Math.max(0.6, Math.round(amount * STOP_LOSS_PCT) / 100);
+        const takeProfit = Math.max(0.1, Math.round(amount * TAKE_PROFIT_PCT) / 100);
+
         // Get proposal
         const propResp = await wsSend(ws, {
           proposal: 1, amount, basis: "stake", contract_type: contractType,
           currency: "USD", multiplier, underlying_symbol: tradeSymbol,
+          limit_order: { stop_loss: stopLoss, take_profit: takeProfit },
         }) as any;
         const proposalId = propResp?.proposal?.id;
         if (!proposalId) throw new Error(`No proposal: ${JSON.stringify(propResp)}`);
