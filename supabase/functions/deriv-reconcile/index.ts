@@ -60,7 +60,8 @@ serve(async (req) => {
         const openIds = new Set((port?.portfolio?.contracts ?? []).map((c: any) => String(c.contract_id)));
 
         const pt = await wsSend(ws, { profit_table: 1, description: 1, limit: 200, sort: "DESC" });
-        const profitById = new Map<string, number>((pt?.profit_table?.transactions ?? []).map((t: any) => [String(t.contract_id), Number(t.profit)]));
+        const profitById = new Map<string, number>((pt?.profit_table?.transactions ?? []).map(
+          (t: any) => [String(t.contract_id), Number(t.sell_price ?? 0) - Number(t.buy_price ?? 0)]));
 
         const vids = [...new Set(list.map((e) => e.ventana_id))];
         const { data: vrows } = await admin.from("ventanas_senales").select("id, estado").in("id", vids as string[]);
@@ -69,8 +70,13 @@ serve(async (req) => {
         for (const e of list) {
           const cid = String(e.contract_id);
           if (!openIds.has(cid)) {
-            // Ya cerrada en Deriv (stop-out u otro). Reconciliar desde profit_table.
-            const p = profitById.has(cid) ? profitById.get(cid)! : 0;
+            // Ya cerrada en Deriv (TP/SL/stop-out). Obtener el profit real del contrato.
+            let p = profitById.has(cid) ? profitById.get(cid)! : 0;
+            try {
+              const pc = await wsSend(ws, { proposal_open_contract: 1, contract_id: cid });
+              const c = pc?.proposal_open_contract;
+              if (c && c.profit !== undefined && c.profit !== null) p = Number(c.profit);
+            } catch (_) { /* usar fallback profit_table */ }
             await admin.from("auto_trade_executions").update({ estado: p >= 0 ? "ganada" : "perdida", resultado: p, execution_id: "recon_deriv" }).eq("id", e.id);
             await admin.rpc("register_close", { p_user_id: userId, p_profit: p });
             out.reconciled++;

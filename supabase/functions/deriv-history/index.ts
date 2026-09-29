@@ -80,7 +80,7 @@ serve(async (req) => {
       buy_price: t.buy_price,
       sell_price: t.sell_price,
       payout: t.payout,
-      profit: t.profit,
+      profit: Number(t.sell_price ?? 0) - Number(t.buy_price ?? 0),
       purchase_time: t.purchase_time,
       sell_time: t.sell_time,
       shortcode: t.shortcode,
