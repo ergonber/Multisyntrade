@@ -132,7 +132,6 @@ class SignalsProvider extends ChangeNotifier {
       _ventanasStream ??= client
           .from('ventanas_senales')
           .stream(primaryKey: ['id'])
-          .eq('origen', 'auto')
           .listen(
             _onVentanasStream,
             onError: (Object e) => _onStreamFailure('ventanas_senales', e),

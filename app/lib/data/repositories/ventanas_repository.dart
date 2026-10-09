@@ -13,7 +13,6 @@ class VentanasRepository {
       final response = await _client
           .from('ventanas_senales')
           .select()
-          .eq('origen', 'auto')
           .order('senal_apertura', ascending: false, nullsFirst: false)
           .order('created_at', ascending: false);
       return (response as List).map((e) => VentanaModel.fromMap(e)).toList();
@@ -28,7 +27,6 @@ class VentanasRepository {
       final response = await _client
           .from('ventanas_senales')
           .select()
-          .eq('origen', 'auto')
           .eq('estado', 'activa')
           .order('senal_apertura', ascending: false, nullsFirst: false);
       return (response as List).map((e) => VentanaModel.fromMap(e)).toList();
