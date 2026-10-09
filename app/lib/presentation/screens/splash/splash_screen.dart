@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../core/utils/global_flags.dart';
 import 'package:provider/provider.dart';
 import '../../../config/app_colors.dart';
 import '../../providers/auth_provider.dart';
@@ -50,6 +51,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     }
 
     if (!mounted) return;
+
+    // Si venimos del link de recuperación de contraseña, ya se abrió NewPasswordScreen.
+    if (GlobalFlags.recovering) return;
 
     if (auth.isAuthenticated) {
       if (auth.isAdmin) {
@@ -102,7 +106,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Image.asset('assets/images/logo.jpg', width: 220, fit: BoxFit.contain),
               const SizedBox(height: 24),
               RichText(
                 text: const TextSpan(

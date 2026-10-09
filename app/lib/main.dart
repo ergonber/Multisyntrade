@@ -21,6 +21,7 @@ import 'presentation/providers/admin/admin_operations_provider.dart';
 import 'presentation/providers/admin/admin_announcements_provider.dart';
 import 'presentation/providers/admin/admin_finance_provider.dart';
 import 'presentation/providers/admin/admin_config_provider.dart';
+import 'core/utils/global_flags.dart';
 import 'presentation/screens/splash/splash_screen.dart';
 import 'presentation/screens/admin/admin_shell.dart';
 import 'presentation/screens/auth/new_password_screen.dart';
@@ -67,6 +68,7 @@ bool _newPasswordShown = false;
 /// Abre la pantalla de nueva contraseña cuando el link de recuperación
 /// (tipo=recovery) devuelve la sesión.
 Future<void> _openNewPasswordScreen() async {
+  GlobalFlags.recovering = true;
   if (_newPasswordShown) return;
   _newPasswordShown = true;
 
@@ -79,8 +81,9 @@ Future<void> _openNewPasswordScreen() async {
     _newPasswordShown = false;
     return;
   }
-  navigator.push(
+  navigator.pushAndRemoveUntil(
     MaterialPageRoute(builder: (_) => const NewPasswordScreen()),
+    (route) => false,
   );
 }
 
@@ -157,6 +160,15 @@ Future<void> _handleWebEmailConfirmation() async {
         _cleanWebUrl('${uri.origin}${uri.path}');
       });
     }
+    return;
+  }
+
+  // Flujo "implicit": el link de recuperación trae los tokens y type=recovery en el #fragment.
+  // Ahí NO hay ?code en la query (eso es el flujo PKCE). Detectarlo y abrir Nueva Contraseña.
+  if (uri.fragment.contains('type=recovery')) {
+    debugPrint('[Recovery] fragment con type=recovery');
+    unawaited(_openNewPasswordScreen());
+    _cleanWebUrl('${uri.origin}${uri.path}');
     return;
   }
 
