@@ -63,10 +63,7 @@ const SUPPORTED_SYMBOLS = new Set([
 ]);
 
 // Activos pausados (se ignoran sus senales). Se operan solo los ganadores consistentes.
-const DISABLED_SYMBOLS = new Set<string>([
-  "CRASH600", "CRASH500", "CRASH150", "CRASH900", "CRASH300", "CRASH1000",
-  "BOOM50", "BOOM150", "BOOM300", "BOOM500", "BOOM1000",
-]);
+const DISABLED_SYMBOLS = new Set<string>([]); // [] = se operan TODAS las senales de Telegram
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
