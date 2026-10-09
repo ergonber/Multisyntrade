@@ -29,11 +29,13 @@ class _SignalsScreenState extends State<SignalsScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
 
     // Realtime es la fuente principal; este timer solo entra si la
-    // suscripción no llegó a conectarse.
+    // suscripción no llegó a conectarse o los datos quedaron viejos.
     _fallbackTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       if (!mounted) return;
       final provider = context.read<SignalsProvider>();
-      if (!provider.realtimeConnected && !provider.isLoading) {
+      final needsRefresh =
+          !provider.realtimeConnected || provider.isStale || provider.lastUpdatedAt == null;
+      if (needsRefresh && !provider.isLoading) {
         provider.fetchAll();
       }
     });
@@ -119,11 +121,11 @@ class _SignalsScreenState extends State<SignalsScreen>
   }
 
   // ------------------------------------------------------------------
-  // Señales en vivo (public.ventanas_senales)
+  // Señales en vivo (public.ventanas_senales, origen='auto', estado='activa')
   // ------------------------------------------------------------------
 
   Widget _buildLiveList(SignalsProvider provider) {
-    final signals = provider.liveSignals;
+    final signals = provider.activeVentanas;
 
     return RefreshIndicator(
       onRefresh: _refresh,
@@ -134,7 +136,7 @@ class _SignalsScreenState extends State<SignalsScreen>
               children: const [
                 SizedBox(height: 120),
                 Center(
-                  child: Text('No hay señales todavía',
+                  child: Text('No hay señales activas ahora',
                       style: TextStyle(color: Colors.grey)),
                 ),
               ],
@@ -150,7 +152,7 @@ class _SignalsScreenState extends State<SignalsScreen>
   }
 
   // ------------------------------------------------------------------
-  // Mis resultados (public.auto_trade_executions)
+  // Mis resultados (public.auto_trade_executions cerradas)
   // ------------------------------------------------------------------
 
   Widget _buildResultsList(SignalsProvider provider) {
@@ -165,7 +167,7 @@ class _SignalsScreenState extends State<SignalsScreen>
               children: const [
                 SizedBox(height: 120),
                 Center(
-                  child: Text('Todavía no tenés operaciones',
+                  child: Text('Todavía no tenés resultados cerrados',
                       style: TextStyle(color: Colors.grey)),
                 ),
               ],
@@ -246,7 +248,10 @@ class _LiveCounterState extends State<_LiveCounter> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              '${provider.activeSignalCount} señales activas',
+              provider.activeSignalCount == 0
+                  ? 'Sin señales activas'
+                  : '${provider.activeSignalCount} señales activas'
+                      '${provider.openExecutionCount > 0 ? ' · ${provider.openExecutionCount} en curso' : ''}',
               style: const TextStyle(
                   fontWeight: FontWeight.w600, fontSize: 14),
             ),
@@ -276,6 +281,7 @@ class _SignalRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _directionColor;
+    final apertura = ventana.senalAperturaDate ?? ventana.sortDate;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -319,7 +325,7 @@ class _SignalRow extends StatelessWidget {
                 ),
                 Flexible(
                   child: Text(
-                    Formatters.dateTime(ventana.sortDate),
+                    Formatters.dateTime(apertura),
                     style: const TextStyle(color: Colors.grey, fontSize: 11),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -329,24 +335,91 @@ class _SignalRow extends StatelessWidget {
             const SizedBox(height: 12),
             Row(
               children: [
-                _StatusDot(
-                  color: ventana.isActiva
-                      ? AppColors.warning
-                      : AppColors.textSecondary,
+                _LevelBadge(
+                  label: 'TP',
+                  value: ventana.tpUsd,
+                  color: AppColors.positive,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  ventana.isActiva ? 'Activa' : 'Cerrada',
-                  style: const TextStyle(
-                      color: Colors.grey, fontWeight: FontWeight.w500),
+                _LevelBadge(
+                  label: 'SL',
+                  value: ventana.slUsd,
+                  color: AppColors.negative,
                 ),
-                const SizedBox(width: 12),
-                if (ventana.resultado != null)
-                  _ResultLabel(resultado: ventana.resultado!),
+                const Spacer(),
+                const _EnCursoChip(),
               ],
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ======================================================================
+// TP / SL en dólares (tp_usd / sl_usd)
+// ======================================================================
+
+class _LevelBadge extends StatelessWidget {
+  const _LevelBadge({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final double? value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = value == null ? '$label —' : '$label \$${value!.toStringAsFixed(2)}';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: value == null ? Colors.grey : color,
+          fontWeight: FontWeight.w700,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+}
+
+class _EnCursoChip extends StatelessWidget {
+  const _EnCursoChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _StatusDot(color: AppColors.warning),
+          SizedBox(width: 6),
+          Text(
+            'En curso',
+            style: TextStyle(
+              color: AppColors.warning,
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -463,38 +536,6 @@ class _StatusDot extends StatelessWidget {
         height: 8,
         decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       );
-}
-
-class _ResultLabel extends StatelessWidget {
-  const _ResultLabel({required this.resultado});
-
-  final String resultado;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = resultado == 'ganada'
-        ? AppColors.positive
-        : resultado == 'perdida'
-            ? AppColors.negative
-            : AppColors.textSecondary;
-
-    final label = resultado == 'ganada'
-        ? 'Ganada'
-        : resultado == 'perdida'
-            ? 'Perdida'
-            : 'Sin operar';
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(label,
-          style: TextStyle(
-              color: color, fontWeight: FontWeight.w600, fontSize: 11)),
-    );
-  }
 }
 
 class _ProfitBadge extends StatelessWidget {

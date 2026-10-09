@@ -6,6 +6,37 @@ import '../../../core/errors/app_exception.dart';
 class VentanasRepository {
   final SupabaseClient _client = SupabaseService.client;
 
+  /// Señales propias (origen='auto'), de cualquier estado, ordenadas por la
+  /// señal de apertura (la más reciente primero).
+  Future<List<VentanaModel>> getAutoVentanas() async {
+    try {
+      final response = await _client
+          .from('ventanas_senales')
+          .select()
+          .eq('origen', 'auto')
+          .order('senal_apertura', ascending: false, nullsFirst: false)
+          .order('created_at', ascending: false);
+      return (response as List).map((e) => VentanaModel.fromMap(e)).toList();
+    } catch (e) {
+      throw const ServerException(message: 'Error al obtener señales');
+    }
+  }
+
+  /// Señales propias activas (origen='auto' y estado='activa').
+  Future<List<VentanaModel>> getActiveAutoVentanas() async {
+    try {
+      final response = await _client
+          .from('ventanas_senales')
+          .select()
+          .eq('origen', 'auto')
+          .eq('estado', 'activa')
+          .order('senal_apertura', ascending: false, nullsFirst: false);
+      return (response as List).map((e) => VentanaModel.fromMap(e)).toList();
+    } catch (e) {
+      throw const ServerException(message: 'Error al obtener señales activas');
+    }
+  }
+
   /// Todas las ventanas visibles para el usuario, ordenadas por la señal de
   /// apertura (la más reciente primero). Las que nunca abrieron quedan al final.
   Future<List<VentanaModel>> getAllVentanas() async {

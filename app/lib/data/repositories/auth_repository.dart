@@ -13,6 +13,21 @@ class AuthRepository {
 
   String get _redirectTo => AppConfig.appUrl;
 
+  String get _recoveryRedirect => AppConfig.recoveryRedirectUrl;
+
+  /// Mensaje real de Supabase, sin el prefijo de la excepción.
+  static String _rawMessage(Object error) {
+    var text = error.toString();
+    const prefixes = ['Exception: ', 'AuthException: ', 'FormatException: '];
+    for (final p in prefixes) {
+      if (text.startsWith(p)) {
+        text = text.substring(p.length);
+        break;
+      }
+    }
+    return text.trim();
+  }
+
   String _mapSupabaseError(String message) {
     final lower = message.toLowerCase();
     if (lower.contains('user already registered') || lower.contains('already registered')) {
@@ -42,7 +57,7 @@ class AuthRepository {
     } on AuthException catch (e) {
       throw app.AuthException(message: _mapSupabaseError(e.message));
     } catch (e) {
-      throw app.AuthException(message: 'Error al iniciar sesión');
+      throw app.AuthException(message: _mapSupabaseError(_rawMessage(e)));
     }
   }
 
@@ -54,11 +69,20 @@ class AuthRepository {
         data: {'nombre': name},
         emailRedirectTo: _redirectTo,
       );
+      // Supabase devuelve un usuario sin identidades cuando la cuenta ya existe
+      // (en lugar de lanzar un error).
+      final identities = response.user?.identities;
+      if (response.user != null && identities != null && identities.isEmpty) {
+        throw const app.AuthException(
+            message: 'Ya existe una cuenta con ese correo.');
+      }
       return response;
+    } on app.AuthException {
+      rethrow;
     } on AuthException catch (e) {
       throw app.AuthException(message: _mapSupabaseError(e.message));
     } catch (e) {
-      throw app.AuthException(message: 'Error al crear cuenta');
+      throw app.AuthException(message: _mapSupabaseError(_rawMessage(e)));
     }
   }
 
@@ -72,9 +96,14 @@ class AuthRepository {
 
   Future<void> resetPassword(String email) async {
     try {
-      await _client.auth.resetPasswordForEmail(email, redirectTo: _redirectTo);
+      await _client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: _recoveryRedirect,
+      );
     } on AuthException catch (e) {
       throw app.AuthException(message: _mapSupabaseError(e.message));
+    } catch (e) {
+      throw app.AuthException(message: _mapSupabaseError(_rawMessage(e)));
     }
   }
 
@@ -83,6 +112,8 @@ class AuthRepository {
       await _client.auth.updateUser(UserAttributes(password: newPassword));
     } on AuthException catch (e) {
       throw app.AuthException(message: _mapSupabaseError(e.message));
+    } catch (e) {
+      throw app.AuthException(message: _mapSupabaseError(_rawMessage(e)));
     }
   }
 

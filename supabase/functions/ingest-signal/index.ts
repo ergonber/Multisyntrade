@@ -51,11 +51,21 @@ const RESULT_BY_REASON: Record<string, "ganada" | "perdida"> = {
   no_operar: "perdida",
 };
 
+// "Profittt": % minimo del camino al TP1 para cerrar. Si es menor (salida ~0 del proveedor),
+// se ignora y se espera el TP1.
+const PROFIT_MIN_PROGRESS = 0.7;
+
 // Indices que el canal opera y que el bridge puede ejecutar en la cuenta Deriv.
 // (150 y 300 se mapean a BOOMxxxN / CRASHxxxN dentro del deriv-bridge.)
 const SUPPORTED_SYMBOLS = new Set([
   "BOOM50", "BOOM150", "BOOM300", "BOOM500", "BOOM600", "BOOM900", "BOOM1000",
   "CRASH50", "CRASH150", "CRASH300", "CRASH500", "CRASH600", "CRASH900", "CRASH1000",
+]);
+
+// Activos pausados (se ignoran sus senales). Se operan solo los ganadores consistentes.
+const DISABLED_SYMBOLS = new Set<string>([
+  "CRASH600", "CRASH500", "CRASH150", "CRASH900", "CRASH300", "CRASH1000",
+  "BOOM50", "BOOM150", "BOOM300", "BOOM500", "BOOM1000",
 ]);
 
 serve(async (req) => {
@@ -103,6 +113,9 @@ serve(async (req) => {
       if (!SUPPORTED_SYMBOLS.has(sym)) {
         return json({ ok: true, ignored: true, reason: "Simbolo no operable en la cuenta" });
       }
+      if (DISABLED_SYMBOLS.has(sym)) {
+        return json({ ok: true, ignored: true, reason: "Activo pausado" });
+      }
 
       const extId = signalId ? String(signalId) : `${sym}-${Date.now()}`;
       const now = new Date().toISOString();
@@ -117,6 +130,9 @@ serve(async (req) => {
           senal_apertura: now,
           fecha_inicio: now,
           external_signal_id: extId,
+          entry_ref: Number(payload.entry) || null,
+          tp1: Number(payload.tp1) || null,
+          tp2: Number(payload.tp2) || null,
         })
         .select("id")
         .single();
@@ -135,9 +151,38 @@ serve(async (req) => {
       const signalId = payload.signal_id;
       const symbol = payload.symbol;
       let result = payload.result;
+      const reason = String(payload.reason ?? "").toLowerCase();
+
+      // "Profittt": el proveedor suele salir con un margen minimo (~0). Solo cerramos si la
+      // ganancia ya alcanzo PROFIT_MIN_PROGRESS del camino al TP1; si es menor, esperamos TP1.
+      if (!payload.result && reason === "profit") {
+        const price = Number(payload.price ?? NaN);
+        let progress: number | null = null;
+        if (symbol && !Number.isNaN(price)) {
+          const { data: v } = await admin
+            .from("ventanas_senales")
+            .select("entry_ref, tp1, direccion")
+            .eq("estado", "activa")
+            .eq("deriv_symbol", String(symbol).toUpperCase())
+            .order("senal_apertura", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (v?.entry_ref && v?.tp1) {
+            const dist = Math.abs(Number(v.tp1) - Number(v.entry_ref));
+            const move = v.direccion === "venta"
+              ? Number(v.entry_ref) - price
+              : price - Number(v.entry_ref);
+            progress = dist > 0 ? move / dist : 0;
+          }
+        }
+        if (progress === null || progress < PROFIT_MIN_PROGRESS) {
+          return json({ ok: true, ignored: true, reason: "profit minimo: se espera TP1", progress });
+        }
+        result = "ganada";
+      }
 
       if (!result && payload.reason) {
-        result = RESULT_BY_REASON[String(payload.reason).toLowerCase()] ?? null;
+        result = RESULT_BY_REASON[reason] ?? null;
       }
       if (result !== "ganada" && result !== "perdida") {
         return json({ ok: false, error: "Resultado invalido" }, 400);

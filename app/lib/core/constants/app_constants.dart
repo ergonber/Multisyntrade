@@ -1,7 +1,7 @@
 class AppConstants {
   AppConstants._();
 
-  static const String appName = 'SynTrade';
+  static const String appName = 'Multisyntrade';
   static const String appVersion = '2.0.0';
 
   static const int maxPasswordLength = 128;

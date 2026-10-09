@@ -110,7 +110,7 @@ class ProfileScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             Center(
-              child: Text('SynTrade v${const String.fromEnvironment('APP_VERSION', defaultValue: '2.0.0')}',
+              child: Text('Multisyntrade v${const String.fromEnvironment('APP_VERSION', defaultValue: '2.0.0')}',
                   style: TextStyle(color: Colors.grey[600], fontSize: 12)),
             ),
           ],

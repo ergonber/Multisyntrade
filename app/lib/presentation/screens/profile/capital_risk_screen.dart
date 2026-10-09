@@ -149,7 +149,7 @@ class _CapitalRiskScreenState extends State<CapitalRiskScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Este dato lo declarás vos. SynTrade no lo verifica.',
+                'Este dato lo declarás vos. Multisyntrade no lo verifica.',
                 style: TextStyle(color: Colors.grey[600], fontSize: 12, fontStyle: FontStyle.italic),
               ),
               const SizedBox(height: 32),

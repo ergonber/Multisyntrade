@@ -184,8 +184,28 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     } catch (e) {
-      _error = 'Error al crear cuenta';
+      _error = e.toString().replaceFirst(RegExp(r'^(Exception|AuthException|FormatException):\s*'), '');
       _status = AuthStatus.unauthenticated;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Envía el mail de recuperación. El redirect (web) es
+  /// https://multisyntrade.vercel.app y la pantalla de nueva contraseña
+  /// se abre al llegar con tipo=recovery.
+  Future<bool> resetPassword(String email) async {
+    _error = null;
+    notifyListeners();
+    try {
+      await _authRepo.resetPassword(email);
+      return true;
+    } on AuthException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _error = e.toString().replaceFirst(RegExp(r'^(Exception|AuthException|FormatException):\s*'), '');
       notifyListeners();
       return false;
     }

@@ -20,6 +20,12 @@ class AppConfig {
     return 'syntrade://auth-callback';
   }
 
+  /// Redirect del mail de recuperación de contraseña (web).
+  /// Debe figurar en la allowlist de Redirect URLs de Supabase.
+  static String get recoveryRedirectUrl => kIsWeb
+      ? 'https://multisyntrade.vercel.app'
+      : 'syntrade://auth-callback';
+
   static bool get isProduction => kReleaseMode;
   static bool get isDevelopment => kDebugMode;
 

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:provider/provider.dart';
 import '../../../config/app_colors.dart';
-import '../../../config/app_config.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/utils/validators.dart';
+import '../../providers/auth_provider.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -16,6 +16,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   bool _emailSent = false;
+  bool _sending = false;
 
   @override
   void dispose() {
@@ -25,18 +26,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   Future<void> _sendReset() async {
     if (!_formKey.currentState!.validate()) return;
-    try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(
-        _emailController.text.trim(),
-        redirectTo: AppConfig.appUrl,
+    setState(() => _sending = true);
+    final auth = context.read<AuthProvider>();
+    final ok = await auth.resetPassword(_emailController.text.trim());
+    if (!mounted) return;
+    setState(() => _sending = false);
+    if (ok) {
+      setState(() => _emailSent = true);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(auth.error ?? 'No se pudo enviar el correo.'),
+          backgroundColor: AppColors.negative,
+        ),
       );
-      if (mounted) setState(() => _emailSent = true);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e'), backgroundColor: AppColors.negative),
-        );
-      }
     }
   }
 
@@ -125,6 +128,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           const SizedBox(height: 32),
           AppButton(
             label: 'ENVIAR INSTRUCCIONES',
+            isLoading: _sending,
             onPressed: _sendReset,
           ),
         ],

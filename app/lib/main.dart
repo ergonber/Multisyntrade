@@ -49,6 +49,7 @@ Future<void> main() async {
   ));
 
   await SupabaseService.init();
+  _listenPasswordRecovery();
 
   if (kIsWeb) {
     await _handleWebEmailConfirmation();
@@ -58,6 +59,39 @@ Future<void> main() async {
   }
 
   runApp(const SynTradeApp());
+}
+
+/// Evita abrir dos veces la pantalla de nueva contraseña.
+bool _newPasswordShown = false;
+
+/// Abre la pantalla de nueva contraseña cuando el link de recuperación
+/// (tipo=recovery) devuelve la sesión.
+Future<void> _openNewPasswordScreen() async {
+  if (_newPasswordShown) return;
+  _newPasswordShown = true;
+
+  for (var i = 0; i < 30 && navigatorKey.currentContext == null; i++) {
+    await Future.delayed(const Duration(milliseconds: 100));
+  }
+
+  final navigator = navigatorKey.currentState;
+  if (navigator == null) {
+    _newPasswordShown = false;
+    return;
+  }
+  navigator.push(
+    MaterialPageRoute(builder: (_) => const NewPasswordScreen()),
+  );
+}
+
+/// Escucha el evento passwordRecovery de Supabase (flujo PKCE).
+void _listenPasswordRecovery() {
+  Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+    if (data.event == AuthChangeEvent.passwordRecovery) {
+      debugPrint('[Auth] passwordRecovery detectado');
+      _openNewPasswordScreen();
+    }
+  });
 }
 
 Future<void> _handleWebEmailConfirmation() async {
@@ -83,17 +117,19 @@ Future<void> _handleWebEmailConfirmation() async {
 
   if (code != null) {
     try {
-      await Supabase.instance.client.auth.exchangeCodeForSession(code);
+      final response =
+          await Supabase.instance.client.auth.exchangeCodeForSession(code);
 
-      if (type == 'recovery') {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (navigatorKey.currentContext != null) {
-            Navigator.of(navigatorKey.currentContext!).push(
-              MaterialPageRoute(builder: (_) => const NewPasswordScreen()),
-            );
-          }
-          _cleanWebUrl('${uri.origin}${uri.path}');
-        });
+      // El verificador PKCE guarda el tipo de link: 'passwordRecovery' cuando
+      // el mail era de recuperación. También llega ?type=recovery en algunos flujos.
+      final isRecovery = type == 'recovery' ||
+          response.redirectType == 'passwordRecovery' ||
+          response.redirectType == 'recovery';
+
+      if (isRecovery) {
+        debugPrint('[Recovery] Link de recuperación de contraseña');
+        unawaited(_openNewPasswordScreen());
+        _cleanWebUrl('${uri.origin}${uri.path}');
       } else {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (navigatorKey.currentContext != null) {
@@ -291,7 +327,7 @@ class _SynTradeAppState extends State<SynTradeApp> with WidgetsBindingObserver {
         ChangeNotifierProvider(create: (_) => AdminConfigProvider()),
       ],
       child: MaterialApp(
-        title: 'SynTrade',
+        title: 'Multisyntrade',
         navigatorKey: navigatorKey,
         debugShowCheckedModeBanner: false,
         theme: AppTheme.dark,

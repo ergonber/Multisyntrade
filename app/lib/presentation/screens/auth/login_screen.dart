@@ -75,21 +75,21 @@ class _LoginScreenState extends State<LoginScreen> {
                   text: const TextSpan(
                     children: [
                       TextSpan(
-                        text: 'SYN',
+                        text: 'MULTI',
                         style: TextStyle(
                           color: AppColors.primary,
-                          fontSize: 28,
+                          fontSize: 26,
                           fontWeight: FontWeight.bold,
-                          letterSpacing: 3,
+                          letterSpacing: 2,
                         ),
                       ),
                       TextSpan(
-                        text: 'TRADE',
+                        text: 'SYNTRADE',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 28,
+                          fontSize: 26,
                           fontWeight: FontWeight.bold,
-                          letterSpacing: 3,
+                          letterSpacing: 2,
                         ),
                       ),
                     ],

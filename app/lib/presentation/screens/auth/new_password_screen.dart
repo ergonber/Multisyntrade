@@ -42,7 +42,10 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
             backgroundColor: AppColors.positive,
           ),
         );
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => route.isFirst,
+        );
       }
     } catch (e) {
       if (mounted) {

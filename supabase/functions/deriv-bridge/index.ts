@@ -19,12 +19,20 @@ type SupabaseClient = ReturnType<typeof createClient>;
 const CONCURRENCY = 25;
 
 /* ---------- Limites de proteccion de capital ---------- */
-const MAX_OPEN_POSITIONS = 6;
+const MAX_OPEN_POSITIONS = 20;
 
-// Proteccion de posicion (limit_order nativo de Deriv), % del stake.
-// Basado en estadisticas: ganancia promedio ~4-5% del stake, perdida ~6.5% (con colas de 25%+).
-const STOP_LOSS_PCT = 6;
-const TAKE_PROFIT_PCT = 5;
+// Proteccion de posicion (limit_order nativo de Deriv), % del stake, POR ACTIVO.
+// SL = percentil 90 de las ganancias de ese activo (calibrado con datos reales). SIN take-profit:
+// las ganancias las cierra el proveedor. Default 30% para activos sin datos.
+const DEFAULT_SL_PCT = 30;
+// Fraccion del camino a TP1 donde se toma ganancia (asegurar). 0.85 = 15% antes del TP1.
+const TP_FRACTION = 0.85;
+// Stop-loss de emergencia (backstop) como % del stake, para evitar stop-outs de ~90%.
+const BACKSTOP_SL_PCT = 20;
+const SL_PCT_BY_SYMBOL: Record<string, number> = {
+  BOOM50: 2.6, BOOM150: 6.4, BOOM300: 3.5, BOOM500: 8.6, BOOM600: 15.7, BOOM900: 15.0, BOOM1000: 3.4,
+  CRASH50: 3.0, CRASH150: 2.7, CRASH300: 10.3, CRASH600: 11.4, CRASH900: 12.8, CRASH1000: 12.9,
+};
 
 // Riesgo por tramo de saldo (demo y real):
 // <10 no opera | 10-99: 1% | 100-1000: 3% | 1001-10000: 2% | >10000: 1%
@@ -57,7 +65,7 @@ async function withRetry<T>(fn: () => Promise<T>, attempts: number, r: string, t
     catch (e) {
       lastErr = e;
       const msg = String(e);
-      const transitorio = /429|rate.?limit|ws_connect|ws_error|ws_timeout|timeout|ETIMEDOUT|socket/i.test(msg);
+      const transitorio = /429|rate.?limit|ws_connect|ws_error|ws_timeout|timeout|ETIMEDOUT|socket|otp|fetch failed|network|ECONNRESET|ENOTFOUND|502|503|504/i.test(msg);
       if (!transitorio || a === attempts - 1) throw e;
       const backoff = 500 * Math.pow(2, a);
       log("RETRY", r, `${tag}: intento ${a + 1} falló (${msg.substring(0, 80)}); reintento en ${backoff}ms`);
@@ -205,6 +213,7 @@ async function executeForVentana(
     let execId: string | undefined;
     let boughtContractId: string | null = null;
     let multiplier = 1;
+    let entrySpot: number | null = null;
 
     let ws: WebSocket | null = null;
     try {
@@ -253,17 +262,35 @@ async function executeForVentana(
         const allowed: number[] = Array.isArray(mr) ? mr : (mr?.values ?? []);
         multiplier = allowed.length ? Math.min(...allowed) : 1;
 
-        // Proteccion: stop-loss y take-profit nativos (montos en USD)
-        const stopLoss = Math.max(0.6, Math.round(amount * STOP_LOSS_PCT) / 100);
-        const takeProfit = Math.max(0.1, Math.round(amount * TAKE_PROFIT_PCT) / 100);
+        // TP/SL: si la senal trae tp_pct/sl_pct (nuestras propias 'auto'), usarlos (convertidos a USD).
+        // Si no (Telegram), TP al TP_FRACTION del camino al TP1 y SL backstop.
+        let takeProfit: number | null = null;
+        let stopLoss = Math.max(0.6, Math.round(amount * BACKSTOP_SL_PCT) / 100);
+        if (vent.tp_usd) {
+          takeProfit = Math.max(0.1, Number(vent.tp_usd));
+        } else if (vent.tp_pct) {
+          takeProfit = Math.max(0.1, Math.round(amount * multiplier * Number(vent.tp_pct) / 100 * 100) / 100);
+        } else {
+          const entryRef = Number(vent.entry_ref ?? 0);
+          const tp1Ref = Number(vent.tp1 ?? 0);
+          if (entryRef > 0 && tp1Ref > 0) {
+            const dP = (Math.abs(tp1Ref - entryRef) / entryRef) * TP_FRACTION;
+            takeProfit = Math.max(0.1, Math.round(amount * multiplier * dP * 100) / 100);
+          }
+        }
+        if (vent.sl_usd) stopLoss = Math.max(0.6, Number(vent.sl_usd));
+        else if (vent.sl_pct) stopLoss = Math.max(0.6, Math.round(amount * multiplier * Number(vent.sl_pct) / 100 * 100) / 100);
+        const limitOrder: Record<string, number> = { stop_loss: stopLoss };
+        if (takeProfit !== null) limitOrder.take_profit = takeProfit;
 
         // Get proposal
         const propResp = await wsSend(ws, {
           proposal: 1, amount, basis: "stake", contract_type: contractType,
           currency: "USD", multiplier, underlying_symbol: tradeSymbol,
-          limit_order: { stop_loss: stopLoss, take_profit: takeProfit },
+          limit_order: limitOrder,
         }) as any;
         const proposalId = propResp?.proposal?.id;
+        entrySpot = propResp?.proposal?.spot ? Number(propResp.proposal.spot) : null;
         if (!proposalId) throw new Error(`No proposal: ${JSON.stringify(propResp)}`);
 
         // Buy
@@ -276,7 +303,7 @@ async function executeForVentana(
 
       // Update pending row to en_curso with contract_id
       await admin.from("auto_trade_executions")
-        .update({ estado: "en_curso", contract_id: contractId, execution_id: contractId })
+        .update({ estado: "en_curso", contract_id: contractId, execution_id: contractId, entry_spot: entrySpot })
         .eq("id", execId);
 
       // Reconciliar carrera: si la ventana ya se cerro mientras comprabamos, vender ya.
@@ -316,6 +343,13 @@ async function executeForVentana(
             .update({ estado: "cancelada", resultado: "sin_operar", senal_cierre: new Date().toISOString() })
             .eq("id", vent.id);
         }
+      } else {
+        // Fallo antes de registrar (OTP/WS/conexion): dejar constancia para no perder la senal en silencio.
+        await admin.from("auto_trade_executions").insert({
+          user_id: userId, ventana_id: vent.id, deriv_symbol: vent.deriv_symbol,
+          activo: vent.tipo, monto: 0, contract_id: null, estado: "rechazada",
+          resultado: 0, execution_id: String(e).substring(0, 200),
+        });
       }
       logE("EXEC", r, `FAIL user=${userId}: ${String(e)}`);
       return "rejected" as const;
@@ -477,7 +511,7 @@ serve(async (req) => {
     if (action === "execute" && ventanaId) {
       const { data: vent } = await admin
         .from("ventanas_senales")
-        .select("id, deriv_symbol, tipo, direccion")
+        .select("id, deriv_symbol, tipo, direccion, entry_ref, tp1, tp_pct, sl_pct, tp_usd, sl_usd")
         .eq("id", ventanaId)
         .eq("estado", "activa")
         .single();
@@ -501,7 +535,7 @@ serve(async (req) => {
     // --- DEFAULT: legacy processOpen + processLiquidate (for backwards compat) ---
     const { data: ventanas } = await admin
       .from("ventanas_senales")
-      .select("id, deriv_symbol, tipo, direccion")
+      .select("id, deriv_symbol, tipo, direccion, entry_ref, tp1, tp_pct, sl_pct, tp_usd, sl_usd")
       .eq("estado", "activa")
       .not("senal_apertura", "is", null);
 

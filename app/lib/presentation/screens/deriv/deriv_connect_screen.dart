@@ -216,7 +216,7 @@ class _DerivConnectScreenState extends State<DerivConnectScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Solo necesitas una cuenta en Deriv. Al conectar, autorizas a SynTrade a ejecutar trades en tu cuenta.',
+                            'Solo necesitas una cuenta en Deriv. Al conectar, autorizas a Multisyntrade a ejecutar trades en tu cuenta.',
                             style: TextStyle(color: Colors.grey[500], fontSize: 12),
                           ),
                           const SizedBox(height: 8),

@@ -16,6 +16,20 @@ class VentanaModel {
   final double? multiplicador;
   final DateTime createdAt;
 
+  /// Origen de la señal: 'auto' = nuestras señales propias,
+  /// 'telegram' / null = señales heredadas (ya no se muestran).
+  final String origen;
+
+  /// Take profit / stop loss en dólares (tp_usd / sl_usd).
+  final double? tpUsd;
+  final double? slUsd;
+
+  /// Nivel de entrada de referencia de la señal.
+  final double? entryRef;
+
+  /// Id de la señal externa que originó esta ventana.
+  final String? externalSignalId;
+
   const VentanaModel({
     required this.id,
     this.titulo,
@@ -33,6 +47,11 @@ class VentanaModel {
     this.riesgoRecomendado,
     this.multiplicador,
     required this.createdAt,
+    this.origen = '',
+    this.tpUsd,
+    this.slUsd,
+    this.entryRef,
+    this.externalSignalId,
   });
 
   bool get isProgramada => estado == 'programada';
@@ -44,6 +63,11 @@ class VentanaModel {
   bool get isGanada => resultado == 'ganada';
   bool get isPerdida => resultado == 'perdida';
   bool get isSinOperar => resultado == 'sin_operar';
+
+  /// Nuestra propia señal (la que genera el bot), no la heredada de Telegram.
+  bool get isAuto => origen == 'auto';
+
+  bool get hasTpSl => tpUsd != null || slUsd != null;
 
   String get directionLabel => isCompra ? 'COMPRA' : 'VENTA';
 
@@ -109,6 +133,11 @@ class VentanaModel {
       riesgoRecomendado: map['riesgo_recomendado']?.toDouble(),
       multiplicador: map['multiplicador']?.toDouble(),
       createdAt: DateTime.parse(map['created_at'] ?? DateTime.now().toIso8601String()),
+      origen: map['origen'] ?? '',
+      tpUsd: map['tp_usd']?.toDouble(),
+      slUsd: map['sl_usd']?.toDouble(),
+      entryRef: map['entry_ref']?.toDouble(),
+      externalSignalId: map['external_signal_id'],
     );
   }
 
@@ -129,5 +158,10 @@ class VentanaModel {
     'riesgo_recomendado': riesgoRecomendado,
     'multiplicador': multiplicador,
     'created_at': createdAt.toIso8601String(),
+    'origen': origen,
+    'tp_usd': tpUsd,
+    'sl_usd': slUsd,
+    'entry_ref': entryRef,
+    'external_signal_id': externalSignalId,
   };
 }

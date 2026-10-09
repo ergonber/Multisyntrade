@@ -12,29 +12,48 @@ import '../../data/models/trade_execution_model.dart';
 import '../../data/models/user_stats_model.dart';
 import '../../core/errors/app_exception.dart';
 
+/// Señales propias (`ventanas_senales.origen = 'auto'`) + resultados
+/// (`auto_trade_executions`), con realtime vía `.stream()`.
 class SignalsProvider extends ChangeNotifier {
   final VentanasRepository _ventanasRepo = VentanasRepository();
   final ActivosRepository _activosRepo = ActivosRepository();
 
+  static const Duration _staleAfter = Duration(seconds: 60);
+  static const Duration _reconnectDelay = Duration(seconds: 5);
+
   final Map<String, VentanaModel> _ventanasById = {};
   List<ActivoModel> _activos = [];
-  List<TradeExecutionModel> _myResults = [];
-  Map<String, TradeExecutionModel> _myExecutions = {};
+  List<TradeExecutionModel> _executions = [];
   PerformanceModel? _performance;
   bool _isLoading = false;
+  bool _fetching = false;
   String? _error;
 
-  RealtimeChannel? _channel;
-  bool _realtimeConnected = false;
+  StreamSubscription<SupabaseStreamEvent>? _ventanasStream;
+  StreamSubscription<SupabaseStreamEvent>? _executionsStream;
+  Timer? _reconnectTimer;
   bool _realtimeStarting = false;
-  Timer? _execRefreshTimer;
+  bool _streamHealthy = false;
+  String? _streamUserId;
+  DateTime? _lastUpdatedAt;
+  bool _disposed = false;
 
   List<ActivoModel> get activos => _activos;
   bool get isLoading => _isLoading;
   String? get error => _error;
   PerformanceModel? get performance => _performance;
-  bool get realtimeConnected => _realtimeConnected;
 
+  /// true cuando los streams de realtime están vivos y recibiendo datos.
+  bool get realtimeConnected => _streamHealthy;
+
+  DateTime? get lastUpdatedAt => _lastUpdatedAt;
+
+  /// Sin datos frescos hace más de [_staleAfter].
+  bool get isStale =>
+      _lastUpdatedAt != null &&
+      DateTime.now().difference(_lastUpdatedAt!) > _staleAfter;
+
+  /// Nuestras señales (origen='auto'), de mayor a menor por apertura.
   List<VentanaModel> get liveSignals => _sorted(_ventanasById.values);
 
   List<VentanaModel> get activeVentanas =>
@@ -46,7 +65,7 @@ class SignalsProvider extends ChangeNotifier {
   List<VentanaModel> get closedVentanas =>
       liveSignals.where((v) => v.isCerrada || v.isCancelada).toList();
 
-  int get activeSignalCount => _ventanasById.values.where((v) => v.isActiva).length;
+  int get activeSignalCount => activeVentanas.length;
 
   DateTime? get lastSignalAt {
     DateTime? latest;
@@ -57,10 +76,19 @@ class SignalsProvider extends ChangeNotifier {
     return latest;
   }
 
-  List<TradeExecutionModel> get myResults => List.unmodifiable(_myResults);
+  /// Resultados cerrados (ganada / perdida) de mis operaciones.
+  List<TradeExecutionModel> get myResults => List.unmodifiable(
+      _executions.where((e) => e.isGanada || e.isPerdida).toList());
 
+  /// Operaciones abiertas (en curso / pendientes).
+  List<TradeExecutionModel> get openExecutions => List.unmodifiable(
+      _executions.where((e) => e.isEnCurso || e.estado == 'pendiente').toList());
+
+  /// Últimas operaciones para el Home (cualquier estado, más recientes).
   List<TradeExecutionModel> get recentExecutions =>
-      _myResults.take(3).toList();
+      _executions.take(3).toList();
+
+  int get openExecutionCount => openExecutions.length;
 
   static int _bySenalDesc(VentanaModel a, VentanaModel b) {
     final da = a.senalAperturaDate ?? a.fechaInicio;
@@ -76,85 +104,126 @@ class SignalsProvider extends ChangeNotifier {
   }
 
   TradeExecutionModel? getExecutionForVentana(String ventanaId) {
-    return _myExecutions[ventanaId];
+    for (final exec in _executions) {
+      if (exec.ventanaId == ventanaId) return exec;
+    }
+    return null;
   }
 
   // ---------------------------------------------------------------
-  // Realtime
+  // Realtime con supabase .stream()
   // ---------------------------------------------------------------
 
   Future<void> startRealtime() async {
-    if (_channel != null || _realtimeStarting) return;
+    if (_disposed || _realtimeStarting) return;
     final client = SupabaseService.client;
     if (client.auth.currentSession == null) return;
 
+    final userId = client.auth.currentUser?.id;
+
+    // Si cambió el usuario logueado, recreamos los streams.
+    if (_streamUserId != null && _streamUserId != userId) {
+      _teardownStreams();
+    }
+    if (_ventanasStream != null && _executionsStream != null) return;
+
     _realtimeStarting = true;
     try {
-      _channel = client
-          .channel('ventanas_senales_live')
-          .onPostgresChanges(
-            event: PostgresChangeEvent.insert,
-            schema: 'public',
-            table: 'ventanas_senales',
-            callback: _onRemoteChange,
-          )
-          .onPostgresChanges(
-            event: PostgresChangeEvent.update,
-            schema: 'public',
-            table: 'ventanas_senales',
-            callback: _onRemoteChange,
-          )
-          .subscribe(_onSubscribeStatus);
+      _ventanasStream ??= client
+          .from('ventanas_senales')
+          .stream(primaryKey: ['id'])
+          .eq('origen', 'auto')
+          .listen(
+            _onVentanasStream,
+            onError: (Object e) => _onStreamFailure('ventanas_senales', e),
+            onDone: () => _onStreamFailure('ventanas_senales', 'closed'),
+          );
+      if (_executionsStream == null && userId != null) {
+        _executionsStream = client
+            .from('auto_trade_executions')
+            .stream(primaryKey: ['id'])
+            .eq('user_id', userId)
+            .listen(
+              _onExecutionsStream,
+              onError: (Object e) =>
+                  _onStreamFailure('auto_trade_executions', e),
+              onDone: () =>
+                  _onStreamFailure('auto_trade_executions', 'closed'),
+            );
+        _streamUserId = userId;
+      }
     } finally {
       _realtimeStarting = false;
     }
   }
 
-  void _onSubscribeStatus(RealtimeSubscribeStatus status, Object? error) {
-    final wasConnected = _realtimeConnected;
-    _realtimeConnected = status == RealtimeSubscribeStatus.subscribed;
-    if (error != null) {
-      debugPrint('[Signals] realtime $status: $error');
+  void _onVentanasStream(SupabaseStreamEvent rows) {
+    if (_disposed) return;
+    _ventanasById.clear();
+    for (final row in rows) {
+      try {
+        final ventana = VentanaModel.fromMap(row);
+        if (ventana.id.isNotEmpty) _ventanasById[ventana.id] = ventana;
+      } catch (_) {}
     }
-    if (wasConnected != _realtimeConnected) notifyListeners();
+    _markUpdated();
   }
 
-  void _onRemoteChange(PostgresChangePayload payload) {
-    final record = payload.newRecord;
-    if (record.isEmpty) return;
+  void _onExecutionsStream(SupabaseStreamEvent rows) {
+    if (_disposed) return;
+    final list = <TradeExecutionModel>[];
+    for (final row in rows) {
+      try {
+        list.add(TradeExecutionModel.fromMap(row));
+      } catch (_) {}
+    }
+    list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    _executions = list;
+    _markUpdated();
+  }
 
-    final incoming = VentanaModel.fromMap(record);
-    if (incoming.id.isEmpty) return;
-
-    final previous = _ventanasById[incoming.id];
-    _ventanasById[incoming.id] = incoming;
+  void _markUpdated() {
+    _lastUpdatedAt = DateTime.now();
+    if (!_streamHealthy) _streamHealthy = true;
     notifyListeners();
-
-    final changed = previous == null ||
-        previous.estado != incoming.estado ||
-        previous.resultado != incoming.resultado;
-    if (changed) _scheduleResultsRefresh();
   }
 
-  void _scheduleResultsRefresh() {
-    _execRefreshTimer?.cancel();
-    _execRefreshTimer = Timer(const Duration(milliseconds: 600), () {
-      _fetchMyExecutions().then((results) {
-        _myResults = results;
-        _myExecutions = _indexByVentana(results);
-        notifyListeners();
-      });
+  void _onStreamFailure(String table, Object error) {
+    if (_disposed) return;
+    debugPrint('[Signals] stream $table: $error');
+    _streamHealthy = false;
+    _teardownStreams();
+    notifyListeners();
+    _scheduleReconnect();
+  }
+
+  void _scheduleReconnect() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(_reconnectDelay, () {
+      if (_disposed) return;
+      unawaited(startRealtime());
     });
   }
 
-  void stopRealtime() {
-    _execRefreshTimer?.cancel();
-    final channel = _channel;
-    _channel = null;
-    _realtimeConnected = false;
+  void _teardownStreams() {
+    final ventanas = _ventanasStream;
+    final executions = _executionsStream;
+    _ventanasStream = null;
+    _executionsStream = null;
+    _streamUserId = null;
+    _streamHealthy = false;
     try {
-      channel?.unsubscribe();
+      ventanas?.cancel();
     } catch (_) {}
+    try {
+      executions?.cancel();
+    } catch (_) {}
+  }
+
+  void stopRealtime() {
+    _reconnectTimer?.cancel();
+    _teardownStreams();
+    if (!_disposed) notifyListeners();
   }
 
   // ---------------------------------------------------------------
@@ -162,13 +231,15 @@ class SignalsProvider extends ChangeNotifier {
   // ---------------------------------------------------------------
 
   Future<void> fetchAll() async {
+    if (_fetching || _disposed) return;
+    _fetching = true;
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
       final results = await Future.wait([
-        _ventanasRepo.getAllVentanas(),
+        _ventanasRepo.getAutoVentanas(),
         _activosRepo.getActivos(),
         _fetchMyExecutions(),
       ]);
@@ -178,28 +249,18 @@ class SignalsProvider extends ChangeNotifier {
         ..clear()
         ..addEntries(ventanas.map((v) => MapEntry(v.id, v)));
       _activos = results[1] as List<ActivoModel>;
-      _myResults = results[2] as List<TradeExecutionModel>;
-      _myExecutions = _indexByVentana(_myResults);
+      _executions = results[2] as List<TradeExecutionModel>;
+      _lastUpdatedAt = DateTime.now();
     } on AppException catch (e) {
       _error = e.message;
     } catch (e) {
       _error = 'Error inesperado';
     } finally {
       _isLoading = false;
+      _fetching = false;
       notifyListeners();
       unawaited(startRealtime());
     }
-  }
-
-  static Map<String, TradeExecutionModel> _indexByVentana(
-      List<TradeExecutionModel> results) {
-    final map = <String, TradeExecutionModel>{};
-    for (final exec in results) {
-      if (!map.containsKey(exec.ventanaId)) {
-        map[exec.ventanaId] = exec;
-      }
-    }
-    return map;
   }
 
   Future<void> fetchPerformance({String period = 'all'}) async {
@@ -232,9 +293,10 @@ class SignalsProvider extends ChangeNotifier {
           .eq('user_id', userId)
           .order('creado_en', ascending: false);
 
-      return [
+      final list = [
         for (final e in response as List) TradeExecutionModel.fromMap(e)
       ];
+      return list;
     } catch (_) {
       return [];
     }
@@ -249,12 +311,9 @@ class SignalsProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _execRefreshTimer?.cancel();
-    final channel = _channel;
-    _channel = null;
-    try {
-      channel?.unsubscribe();
-    } catch (_) {}
+    _disposed = true;
+    _reconnectTimer?.cancel();
+    _teardownStreams();
     super.dispose();
   }
 }

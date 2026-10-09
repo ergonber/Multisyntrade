@@ -7,6 +7,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/signals_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/deriv_provider.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/section_header.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../data/models/trade_execution_model.dart';
@@ -99,6 +100,7 @@ class _DashboardTab extends StatefulWidget {
 class _DashboardTabState extends State<_DashboardTab> {
   String _selectedPeriod = 'all';
   Timer? _refreshTimer;
+  int _perfTick = 0;
 
   static const _periods = [
     ('all', 'Todo'),
@@ -158,10 +160,19 @@ class _DashboardTabState extends State<_DashboardTab> {
   @override
   void initState() {
     super.initState();
+    // Realtime (.stream()) mantiene los datos frescos; este timer solo
+    // vuelve a consultar si la suscripción falló o los datos quedaron viejos.
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (mounted) {
-        context.read<SignalsProvider>().fetchAll();
-        context.read<SignalsProvider>().fetchPerformance(period: _selectedPeriod);
+      if (!mounted) return;
+      final provider = context.read<SignalsProvider>();
+      final needsRefresh = !provider.realtimeConnected ||
+          provider.isStale ||
+          provider.lastUpdatedAt == null;
+      if (needsRefresh && !provider.isLoading) {
+        provider.fetchAll();
+      }
+      if (++_perfTick % 6 == 0) {
+        provider.fetchPerformance(period: _selectedPeriod);
       }
     });
   }
@@ -195,7 +206,7 @@ class _DashboardTabState extends State<_DashboardTab> {
                     Text('Hola, ${auth.userName}',
                         style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
-                    const Text('Bienvenido a SynTrade',
+                    const Text('Bienvenido a Multisyntrade',
                         style: TextStyle(color: Colors.grey, fontSize: 14)),
                   ],
                 ),
@@ -215,6 +226,19 @@ class _DashboardTabState extends State<_DashboardTab> {
 
             // UX Banners: capital y Deriv
             ..._buildSetupBanners(profile, deriv),
+
+            const SizedBox(height: 24),
+
+            const SectionHeader(title: 'SEÑALES EN VIVO'),
+            const SizedBox(height: 12),
+            _LiveSignalsCard(
+              provider: signals,
+              onVerSenales: () {
+                final homeState =
+                    context.findAncestorStateOfType<_HomeScreenState>();
+                homeState?.setState(() => homeState._currentIndex = 1);
+              },
+            ),
 
             const SizedBox(height: 24),
 
@@ -253,6 +277,85 @@ class _DashboardTabState extends State<_DashboardTab> {
             const SizedBox(height: 24),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _LiveSignalsCard extends StatelessWidget {
+  final SignalsProvider provider;
+  final VoidCallback onVerSenales;
+
+  const _LiveSignalsCard({
+    required this.provider,
+    required this.onVerSenales,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final active = provider.activeSignalCount;
+    final open = provider.openExecutionCount;
+    final last = provider.lastSignalAt;
+    final connected = provider.realtimeConnected;
+
+    return AppCard(
+      onTap: onVerSenales,
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.show_chart, color: AppColors.primary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  active > 0
+                      ? '$active señales activas'
+                      : 'Sin señales activas',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 15),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  last != null
+                      ? 'Última ${Formatters.relativeTime(last)}'
+                      : 'Esperando la próxima señal',
+                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          if (open > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                '$open en curso',
+                style: const TextStyle(
+                  color: AppColors.warning,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          const SizedBox(width: 8),
+          Icon(
+            connected ? Icons.chevron_right : Icons.sync,
+            color: connected ? Colors.grey : AppColors.warning,
+            size: 20,
+          ),
+        ],
       ),
     );
   }

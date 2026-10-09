@@ -108,21 +108,21 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                 text: const TextSpan(
                   children: [
                     TextSpan(
-                      text: 'SYN',
+                      text: 'MULTI',
                       style: TextStyle(
                         color: AppColors.primary,
-                        fontSize: 32,
+                        fontSize: 30,
                         fontWeight: FontWeight.bold,
-                        letterSpacing: 4,
+                        letterSpacing: 3,
                       ),
                     ),
                     TextSpan(
-                      text: 'TRADE',
+                      text: 'SYNTRADE',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 32,
+                        fontSize: 30,
                         fontWeight: FontWeight.bold,
-                        letterSpacing: 4,
+                        letterSpacing: 3,
                       ),
                     ),
                   ],
@@ -130,7 +130,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               ),
               const SizedBox(height: 8),
               const Text(
-                'Plataforma de Senales de Trading',
+                'Plataforma de Señales de Trading',
                 style: TextStyle(color: Colors.grey, fontSize: 14),
               ),
             ],
